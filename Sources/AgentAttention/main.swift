@@ -171,9 +171,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func refresh() {
         refreshTheme()
         let count = store.pending.count
+        let dockCount = store.visible.filter { $0.status == "waiting" }.count
         let dockVisible = UserDefaults.standard.bool(forKey: "dock")
         let menuVisible = UserDefaults.standard.bool(forKey: "menubar")
-        let indicator = "\(store.aggregate):\(count):\(dockVisible):\(menuVisible):\(IconAppearance.shared.selected.rawValue)"
+        let indicator = "\(store.aggregate):\(count):\(dockCount):\(dockVisible):\(menuVisible):\(IconAppearance.shared.selected.rawValue)"
         if indicator != renderedIndicator {
         renderedIndicator = indicator
         let color = NSColor(stateColor(store.aggregate))
@@ -185,8 +186,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         status?.isVisible = menuVisible
         let policy: NSApplication.ActivationPolicy = dockVisible ? .regular : .accessory
         if NSApp.activationPolicy() != policy { NSApp.setActivationPolicy(policy) }
-        NSApp.dockTile.badgeLabel = count > 0 ? String(count) : nil
-        let dockView = NSHostingView(rootView: ZStack(alignment: .topTrailing) { Image(nsImage: Brand.dockIcon).resizable().scaledToFit(); Circle().fill(stateColor(store.aggregate)).frame(width: 23, height: 23).overlay(Circle().stroke(.white.opacity(0.9), lineWidth: 3)).padding(7) })
+        NSApp.dockTile.badgeLabel = dockCount > 0 ? String(dockCount) : nil
+        let dockView = NSHostingView(rootView: ZStack(alignment: .topTrailing) {
+            Image(nsImage: Brand.dockIcon).resizable().scaledToFit()
+            if dockCount > 0 {
+                Circle().fill(stateColor("waiting")).frame(width: 23, height: 23)
+                    .overlay(Circle().stroke(.white.opacity(0.9), lineWidth: 3)).padding(7)
+            }
+        })
         NSApp.dockTile.contentView = dockView; NSApp.dockTile.display()
         }
         if let id = panelSession, !store.visible.contains(where: { $0.id == id && $0.waiting }) {
