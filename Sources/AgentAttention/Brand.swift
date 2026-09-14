@@ -35,7 +35,7 @@ final class IconAppearance: ObservableObject {
         guard selected != mood || !applied else { return }
         applied = true
         selected = mood
-        NSApp.applicationIconImage = mood.image
+        NSApp.applicationIconImage = Brand.dockImages[mood]
     }
 }
 
@@ -45,6 +45,8 @@ enum Brand {
         (mood, mood.url.flatMap(NSImage.init(contentsOf:)) ?? NSImage(systemSymbolName: "bell.fill", accessibilityDescription: mood.title)!)
     })
     static var icon: NSImage { IconAppearance.shared.selected.image }
+    static let dockImages: [IconMood: NSImage] = images.mapValues { AppIconLayout.image(from: $0) }
+    static var dockIcon: NSImage { dockImages[IconAppearance.shared.selected]! }
     // A dedicated monochrome mark, not a downscaled illustration: readable at menu-bar size.
     static var menuIcon: NSImage {
         let image = NSImage(size: NSSize(width: 20, height: 20), flipped: false) { _ in

@@ -11,13 +11,12 @@ for artwork in Assets/*.png; do
 done
 iconset=".build/Pingvi.iconset"
 mkdir -p "$iconset"
+/usr/bin/python3 tools/prepare_icons.py
 for size in 16 32 128 256 512; do
-    sips -z "$size" "$size" Assets/Ice.png --out "$iconset/icon_${size}x${size}.png" >/dev/null
-    double=$((size * 2))
-    sips -z "$double" "$double" Assets/Ice.png --out "$iconset/icon_${size}x${size}@2x.png" >/dev/null
+    cp ".build/PingviAssets.xcassets/AppIcon.appiconset/icon_${size}x${size}@1x.png" "$iconset/icon_${size}x${size}.png"
+    cp ".build/PingviAssets.xcassets/AppIcon.appiconset/icon_${size}x${size}@2x.png" "$iconset/icon_${size}x${size}@2x.png"
 done
 iconutil -c icns "$iconset" -o "$app/Contents/Resources/Pingvi.icns"
-/usr/bin/python3 tools/prepare_icons.py
 xcrun actool .build/PingviAssets.xcassets --compile "$app/Contents/Resources" --platform macosx --minimum-deployment-target 14.0 --app-icon AppIcon --output-partial-info-plist .build/icon-info.plist
 cat > "$app/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
