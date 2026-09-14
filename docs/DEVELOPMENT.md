@@ -45,6 +45,7 @@ dist/Pingvi.app/Contents/MacOS/AgentAttention --preview-floating docs/media/floa
 
 Для тёмного варианта добавьте `--preview-dark` к `--preview-dashboard` или `--preview-floating`.
 Для просмотра найденного сообщения в демонстрационной переписке добавьте `--preview-search` к `--preview-dashboard`.
+Для заметки, шаблонов или обзора результатов используйте соответственно `--preview-note`, `--preview-templates` или `--preview-results` вместе с `--preview-dashboard`; эти режимы используют вымышленные данные.
 Для окна настроек добавьте `--preview-settings` к `--preview-dashboard`.
 
 Экспортирует настоящий интерфейс с вымышленными проектами без опроса пользовательских сессий. Не используйте рабочие диалоги в публичных скриншотах.

@@ -3,37 +3,41 @@ import SwiftUI
 struct MessageComposer: View {
     @State private var inputAnchor = NSView()
     @State private var attachmentError: String?
+    @ObservedObject private var templates = ReplyTemplates.shared
+    @State private var editingTemplates = false
     var placeholder: String
     @Binding var text: String
     var canSend: Bool
     var sending = false
     var showsSend = true
+    var imageDirectory = ClipboardImage.directory
     var send: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-        HStack(alignment: .bottom, spacing: 10) {
+        HStack(alignment: .center, spacing: 10) {
             Button {
                 AttachmentPicker.present(from: inputAnchor.window) { urls in
                     do { text = try AttachmentReference.adding(urls, to: text); attachmentError = nil }
                     catch { attachmentError = error.localizedDescription }
                 }
-            } label: { Image(systemName: "paperclip") }
+            } label: { Image(systemName: "paperclip").font(.system(size: 16)).frame(width: 24, height: 24) }
                 .buttonStyle(.plain).disabled(sending)
                 .accessibilityLabel("Прикрепить файл или скриншот")
                 .help("Прикрепить локальный файл или скриншот")
-            TextField(placeholder, text: $text, axis: .vertical)
-                .textFieldStyle(.plain).lineLimit(2...7)
-                .onKeyPress(.return, phases: .down) { key in
-                    // Let input methods confirm composed text before interpreting Enter as send.
-                    if (inputAnchor.window?.firstResponder as? NSTextView)?.hasMarkedText() == true { return .ignored }
-                    if key.modifiers.contains(.shift) {
-                        (inputAnchor.window?.firstResponder as? NSTextView)?.insertNewlineIgnoringFieldEditor(nil)
-                        return .handled
-                    }
-                    if canSend && !sending { send() }
-                    return .handled
+            Menu {
+                ForEach(templates.items) { item in
+                    Button(item.title) { text = ReplyTemplates.inserting(item.text, into: text) }
                 }
+                Divider()
+                Button("Управлять шаблонами…") { editingTemplates = true }
+            } label: { Image(systemName: "text.badge.plus").font(.system(size: 16)).frame(width: 24, height: 24) }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                .disabled(sending).help("Вставить шаблон ответа").accessibilityLabel("Шаблоны ответов")
+            ComposerTextInput(text: $text, send: { if canSend && !sending { send() } }, pasteImage: pasteImage)
+                .overlay(alignment: .topLeading) {
+                    if text.isEmpty { Text(placeholder).foregroundStyle(.tertiary).allowsHitTesting(false) }
+                }.accessibilityLabel(placeholder)
             if showsSend {
                 Button { if canSend && !sending { send() } } label: {
                     Image(systemName: sending ? "hourglass" : "paperplane.fill")
@@ -53,6 +57,16 @@ struct MessageComposer: View {
         }
         if let attachmentError { Text(attachmentError).font(.caption).foregroundStyle(.red) }
         }.background(ComposerInputAnchor(view: inputAnchor).frame(width: 0, height: 0))
+            .sheet(isPresented: $editingTemplates) { ReplyTemplateSettings(templates: templates) }
+    }
+
+    private func pasteImage(_ data: Data) {
+        guard !sending else { return }
+        do {
+            let url = try ClipboardImage.save(data, directory: imageDirectory)
+            text = try AttachmentReference.adding([url], to: text)
+            attachmentError = nil
+        } catch { attachmentError = error.localizedDescription }
     }
 }
 

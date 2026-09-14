@@ -37,6 +37,8 @@ struct ContentView: View {
     @AppStorage("chatEnabled") private var chatEnabled = false
     @State private var newChat = false
     @State private var renamingSession: Session?
+    @State private var noteSession: Session?
+    @State private var showResults = false
     @AppStorage("setupComplete") private var setupComplete = false
     @FocusState private var searching: Bool
     var workspaceSessions: [Session] {
@@ -136,6 +138,8 @@ struct ContentView: View {
             .sheet(item: $renamingSession) { session in
                 RenameSessionView(store: store, session: session)
             }
+            .sheet(item: $noteSession) { session in SessionNoteEditor(store: store, session: session) }
+            .sheet(isPresented: $showResults) { CompletedResultsView(store: store, workspace: workspace) }
             .onChange(of: chatEnabled) { _, enabled in if !enabled { newChat = false } }
     }
     var sidebar: some View {
@@ -186,6 +190,13 @@ struct ContentView: View {
                     }.buttonStyle(.plain).accessibilityAddTraits(filter == item ? .isSelected : [])
                 }
             }.padding(3).background(Palette.input, in: RoundedRectangle(cornerRadius: 11))
+            Button { showResults = true } label: {
+                HStack {
+                    Label("Обзор результатов", systemImage: "checkmark.bubble")
+                    Spacer()
+                    Text("\(workspaceSessions.filter { $0.status == "done" }.count)")
+                }.font(.caption).foregroundStyle(Palette.accent)
+            }.buttonStyle(.plain)
             ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
                     sessionList
@@ -241,6 +252,7 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(store.title(s)).font(.system(size: 13, weight: .semibold)).lineLimit(2)
                     Text(s.agent.capitalized + " · " + (s.project.isEmpty ? s.source : URL(fileURLWithPath: s.project).lastPathComponent)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                    if !store.note(s).isEmpty { Label(store.note(s), systemImage: "note.text").font(.caption2).foregroundStyle(.secondary).lineLimit(1) }
                     if let group = store.workspaces.first(where: { $0.id == store.workspaceID(s) }) {
                         Label(group.name, systemImage: "folder").font(.caption2).foregroundStyle(Palette.accent)
                     }
@@ -261,6 +273,7 @@ struct ContentView: View {
         }.buttonStyle(.plain).contextMenu {
             SessionReadAction(store: store, session: s)
             Button("Переименовать") { renamingSession = s }
+            Button("Заметка к диалогу") { noteSession = s }
             Menu("Рабочее пространство") {
                 Button("Без пространства") { store.assign(s, to: nil) }
                 ForEach(store.workspaces) { group in
@@ -390,7 +403,7 @@ struct QuestionView: View {
                 Text(store.title(session)).font(.system(size: 23, weight: .semibold)).textSelection(.enabled)
                 projectLabel
             }
-            SessionReadAction(store: store, session: session)
+            SessionToolsView(store: store, session: session)
             if renaming {
                 HStack { TextField("Название", text: $newName); Button("Сохранить") { store.local.names[session.id] = newName; store.save(); renaming = false } }
             }

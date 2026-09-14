@@ -38,6 +38,7 @@ struct LocalState: Codable {
     var comments: [String: [String: String]]? = [:]
     var answeredContext: [String: String]? = [:]
     var readQuestions: [String: String]? = [:]
+    var notes: [String: String]? = [:]
 }
 
 final class Bridge {
@@ -144,6 +145,15 @@ final class Store: ObservableObject {
         local.uncertain = sent
         do { try persist(local) }
         catch { message = "Не удалось сохранить очередь: \(error.localizedDescription)" }
+        onChange?()
+    }
+    func note(_ session: Session) -> String { local.notes?[session.id] ?? "" }
+    func setNote(_ text: String, for session: Session) throws {
+        var updated = local
+        if updated.notes == nil { updated.notes = [:] }
+        updated.notes?[session.id] = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : text
+        try persist(updated)
+        local = updated
         onChange?()
     }
     func clearQuestionDrafts() throws {
@@ -257,6 +267,7 @@ final class Store: ObservableObject {
             if completeSources.contains(missing.source) {
                 local.seen.remove(missing.id); local.retired.remove(missing.id)
                 local.readQuestions?.removeValue(forKey: missing.id)
+                local.notes?.removeValue(forKey: missing.id)
                 local.workspaceAssignments?.removeValue(forKey: missing.id)
                 local.excluded.remove(missing.id); local.names.removeValue(forKey: missing.id)
                 sent.removeValue(forKey: missing.id); local.deliveryStarted?.removeValue(forKey: missing.id)

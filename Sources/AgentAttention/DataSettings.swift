@@ -22,6 +22,9 @@ struct DataSettings: View {
                 LabeledContent("Отправки, требующие проверки", value: String(report.pending))
             }
             Button("Открыть папку данных") { NSWorkspace.shared.open(Bridge.root) }
+            Button("Открыть вставленные скриншоты") { NSWorkspace.shared.open(ClipboardImage.directory) }
+                .disabled(!FileManager.default.fileExists(atPath: ClipboardImage.directory.path))
+            Text("Скриншоты из буфера хранятся в папке clipboard-images. Удаление ссылки из ответа не удаляет сам файл.").font(.caption).foregroundStyle(.secondary)
             Button("Обновить сведения", action: refresh).disabled(busy)
             if let message { Text(message).font(.caption).textSelection(.enabled) }
         }

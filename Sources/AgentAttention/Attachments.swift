@@ -1,5 +1,21 @@
 import AppKit
 
+enum ClipboardImage {
+    static var directory: URL { Bridge.root.appendingPathComponent("clipboard-images", isDirectory: true) }
+
+    static func save(_ data: Data, directory: URL = directory) throws -> URL {
+        guard let image = NSBitmapImageRep(data: data),
+              let png = image.representation(using: .png, properties: [:]) else {
+            throw NSError(domain: "Attachment", code: 3, userInfo: [NSLocalizedDescriptionKey: "Не удалось прочитать изображение из буфера обмена."])
+        }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let url = directory.appendingPathComponent("Screenshot-\(UUID().uuidString).png")
+        try png.write(to: url, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        return url
+    }
+}
+
 /// References stay in the existing persisted draft and are delivered through CLI text input.
 enum AttachmentReference {
     static let prefix = "Прочитай приложенный локальный файл: "

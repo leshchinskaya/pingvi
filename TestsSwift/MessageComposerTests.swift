@@ -4,6 +4,57 @@ import XCTest
 @testable import AgentAttention
 
 final class MessageComposerTests: XCTestCase {
+    func testPasteImageAttachesFileAndTextPasteStillWorks() throws {
+        _ = NSApplication.shared
+        let pasteboard = NSPasteboard.general
+        let original = (pasteboard.pasteboardItems ?? []).map { item in
+            item.types.compactMap { type in item.data(forType: type).map { (type, $0) } }
+        }
+        defer {
+            pasteboard.clearContents()
+            let items = original.map { values in
+                let item = NSPasteboardItem()
+                for (type, data) in values { item.setData(data, forType: type) }
+                return item
+            }
+            pasteboard.writeObjects(items)
+        }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var draft = "Draft"
+        let view = NSHostingView(rootView: MessageComposer(placeholder: "Ответ", text: Binding(get: { draft }, set: { draft = $0 }), canSend: true, imageDirectory: dir) { XCTFail("Paste must not send") }.padding().frame(width: 450, height: 180))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 450, height: 180), styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = view
+        window.makeKeyAndOrderFront(nil)
+        defer { window.orderOut(nil) }
+        view.layoutSubtreeIfNeeded()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+        let editor = try XCTUnwrap(descendants(view).first { $0 is NSTextView || $0 is NSTextField })
+        XCTAssertTrue(window.makeFirstResponder(editor))
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        pasteboard.clearContents()
+        pasteboard.setData(try XCTUnwrap(bitmap.tiffRepresentation), forType: .tiff)
+        let pasteItem = NSMenuItem(title: "Вставить", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        let nativeEditor = try XCTUnwrap(window.firstResponder as? ComposerTextView)
+        XCTAssertTrue(nativeEditor.validateUserInterfaceItem(pasteItem), "The Edit menu must enable Paste for an image")
+        XCTAssertTrue(NSApp.sendAction(#selector(NSText.paste(_:)), to: window.firstResponder, from: nil))
+        let deadline = Date().addingTimeInterval(3)
+        while !draft.contains(AttachmentReference.prefix) && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        XCTAssertTrue(draft.contains(AttachmentReference.prefix), "Pasting TIFF into the real composer must attach an image")
+        XCTAssertTrue(draft.hasPrefix("Draft"))
+        XCTAssertNoThrow(try AttachmentReference.validate(in: draft))
+        pasteboard.clearContents(); pasteboard.setString(" plain text", forType: .string)
+        let textEditor = try XCTUnwrap(window.firstResponder as? NSTextView)
+        textEditor.setSelectedRange(NSRange(location: 0, length: 0))
+        XCTAssertTrue(NSApp.sendAction(#selector(NSText.paste(_:)), to: window.firstResponder, from: nil))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        XCTAssertTrue(draft.hasPrefix(" plain text"), "Ordinary paste must retain native text behavior")
+        withExtendedLifetime(window) {}
+    }
+
     func testAttachmentPickerIsAttachedToFloatingQuestionPanel() throws {
         _ = NSApplication.shared
         let parent = QuestionPanel(contentRect: NSRect(x: 0, y: 0, width: 440, height: 200),

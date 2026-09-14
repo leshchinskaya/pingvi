@@ -39,6 +39,10 @@ enum ReleasePreview {
             session("demo-theme", "Тёмная тема", "Aurora", "Codex", "done")]
         store.local.drafts = [question.token: ["layout": "Карточки"]]
         store.selected = question.id
+        if CommandLine.arguments.contains("--preview-results-empty") {
+            store.local.sessions.removeAll { $0.status == "done" }
+        }
+        store.local.notes = [question.id: "После ответа проверить мобильную компоновку и состояния без данных."]
         let size = NSSize(width: floating ? 1120 : 1020, height: floating ? 760 : 680)
         let searchMessages = (0..<30).map {
             ChatMessage(id: "earlier-\($0)", role: "assistant", text: "Предыдущее обсуждение \($0).\nПроверены требования и сценарии обновления профиля.", state: "received")
@@ -46,7 +50,14 @@ enum ReleasePreview {
             ChatMessage(id: "search-match", role: "assistant", text: "Миграция профилей находится в db/profile.sql.\nПеред обновлением нужно проверить перенос настроек уведомлений.", state: "received"),
             ChatMessage(id: "search-followup", role: "user", text: "Добавь проверку сохранения настроек после обновления.", state: "received")
         ]
-        let content = CommandLine.arguments.contains("--preview-search")
+        let resultHistory = SearchHistory(messages: [ChatMessage(id: "result", role: "assistant", text: "Тёмная тема готова.\n\nОбновлены фон, карточки и состояния кнопок. Проверены контрастность текста и переключение системной темы.\n\nСледующий шаг — проверить экран профиля на реальных данных.", state: "received")], partial: false, available: true)
+        let content = CommandLine.arguments.contains("--preview-note")
+            ? AnyView(SessionNoteEditor(store: store, session: question))
+            : CommandLine.arguments.contains("--preview-templates")
+            ? AnyView(ReplyTemplateSettings(templates: ReplyTemplates(storageDirectory: directory)))
+            : CommandLine.arguments.contains("--preview-results") || CommandLine.arguments.contains("--preview-results-empty")
+            ? AnyView(CompletedResultsView(store: store, workspace: "all", previewHistories: ["demo-theme": resultHistory]))
+            : CommandLine.arguments.contains("--preview-search")
             ? AnyView(SearchConversationView(store: store, session: question,
                 history: SearchHistory(messages: searchMessages, partial: false, available: true), messageID: "search-match", query: "миграция"))
             : settings ? AnyView(SettingsView(store: store, preview: true)) : floating

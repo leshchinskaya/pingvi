@@ -177,7 +177,7 @@ struct ChatView: View {
             .sheet(item: $renamingSession) { session in
                 RenameSessionView(store: store, session: session)
             }
-            SessionReadAction(store: store, session: session)
+            SessionToolsView(store: store, session: session)
             if requestPending {
                 Button { showRequest = true } label: {
                     HStack { Image(systemName: "hand.raised.fill"); Text("Агент ждёт подтверждения"); Spacer(); Image(systemName: "chevron.right") }
