@@ -328,7 +328,7 @@ struct QuestionView: View {
                     if !session.question.isEmpty && (session.fields.isEmpty || session.kind != "hook") {
                         if session.kind == "screen" && !compact {
                             RecentContextView(text: session.question, previous: session.options.isEmpty ? store.local.answeredContext?[session.id] : nil)
-                        } else { Text(session.question).font(.system(size: 14)).lineSpacing(5).textSelection(.enabled) }
+                        } else { FormattedMessage(text: session.question) }
                     }
                     if !session.waiting && session.status != "offline" {
                         VStack(spacing: 16) {
@@ -343,7 +343,7 @@ struct QuestionView: View {
                     if session.status == "offline" { Label("Последнее обновление: " + Date(timeIntervalSince1970: session.updated).formatted(date: .omitted, time: .shortened), systemImage: "wifi.slash").foregroundStyle(.secondary) }
                     ForEach(session.fields) { field in
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(field.label).font(.headline)
+                            FormattedMessage(text: field.label).fontWeight(.semibold)
                             ForEach(field.options, id: \.label) { option in
                                 Button {
                                     if field.multi {
@@ -354,7 +354,7 @@ struct QuestionView: View {
                                 } label: {
                                     HStack(alignment: .top, spacing: 9) {
                                         Image(systemName: selected(option, in: field) ? (field.multi ? "checkmark.square.fill" : "checkmark.circle.fill") : (field.multi ? "square" : "circle")).foregroundStyle(selected(option, in: field) ? Palette.accent : Color.secondary).padding(.top, 2)
-                                        VStack(alignment: .leading, spacing: 4) { Text(option.label).fontWeight(.medium); if let description = option.description { Text(description).font(.caption).foregroundStyle(.secondary) } }.frame(maxWidth: .infinity, alignment: .leading)
+                                        VStack(alignment: .leading, spacing: 4) { FormattedMessage(text: option.label).fontWeight(.medium); if let description = option.description { FormattedMessage(text: description, size: 12).foregroundStyle(.secondary) } }.frame(maxWidth: .infinity, alignment: .leading)
                                     }.padding(14).surface(radius: 16, selected: selected(option, in: field))
                                 }.buttonStyle(.plain).disabled(!session.canReply || store.submitting.contains(session.id)).accessibilityAddTraits(selected(option, in: field) ? .isSelected : [])
                             }
@@ -381,7 +381,7 @@ struct QuestionView: View {
                                 Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(session.detail, forType: .string) } label: { Label("Копировать", systemImage: "doc.on.doc") }.controlSize(.small)
                                 if session.kind == "screen" {
                                     RecentContextView(text: session.detail, previous: session.options.isEmpty ? store.local.answeredContext?[session.id] : nil, monospaced: true)
-                                } else { Text(session.detail).font(.system(size: 11, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
+                                } else { FormattedMessage(text: session.detail, size: 11, monospaced: true) }
                             }.padding(12).background(Palette.sidebar.opacity(0.6), in: RoundedRectangle(cornerRadius: 10)).padding(.top, 8)
                         }.font(.caption)
                     }
@@ -394,7 +394,7 @@ struct QuestionView: View {
             if session.status == "checking" { Label("Ответ отправлен. Проверяем состояние агента…", systemImage: "arrow.triangle.2.circlepath").font(.caption).foregroundStyle(Palette.accent) }
             if !session.options.isEmpty {
                 VStack(spacing: 7) { ForEach(session.options) { option in
-                    Button { store.reply(session, answer: option.id) } label: { Text(option.label).multilineTextAlignment(.leading).lineLimit(nil).fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 3) }.buttonStyle(.bordered).disabled(!session.canReply || store.submitting.contains(session.id))
+                    Button { store.reply(session, answer: option.id) } label: { FormattedMessage(text: option.label).multilineTextAlignment(.leading).lineLimit(nil).fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 3) }.buttonStyle(.bordered).disabled(!session.canReply || store.submitting.contains(session.id))
                 } }.fixedSize(horizontal: false, vertical: true)
             }
             HStack {
@@ -544,7 +544,7 @@ struct SettingsView: View {
                     }
                 }
             } footer: { Text("Нужен «Универсальный доступ». Список в строке меню доступен без дополнительного разрешения.") }
-            Section { LabeledContent("Версия", value: "0.7.0-beta.3"); Text("Изменения сохраняются автоматически.").foregroundStyle(.secondary) }
+            Section { LabeledContent("Версия", value: "0.7.0-beta.6"); Text("Изменения сохраняются автоматически.").foregroundStyle(.secondary) }
         }
     }
     var notifications: some View {

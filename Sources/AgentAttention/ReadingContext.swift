@@ -83,7 +83,6 @@ struct RecentContextView: View {
         }
     }
     func content(_ text: String) -> some View {
-        Text(text).font(.system(size: monospaced ? 11 : 14, design: monospaced ? .monospaced : .default))
-            .lineSpacing(4).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+        FormattedMessage(text: text, size: monospaced ? 11 : 14, monospaced: monospaced)
     }
 }

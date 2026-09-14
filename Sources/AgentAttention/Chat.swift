@@ -188,7 +188,7 @@ struct ChatView: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 if message.id == firstNew { NewContentDivider() }
                                 Text(message.role == "user" ? "Вы" : session.agent.capitalized).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                                Text(message.text).font(.system(size: 14)).lineSpacing(4).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                                FormattedMessage(text: message.text)
                                 if message.state == "submitted" || message.state == "uncertain" {
                                     Text(message.state == "submitted" ? "Передано в сессию · ожидаем появления в истории" : "Результат отправки неизвестен").font(.caption2).foregroundStyle(.secondary)
                                     HStack {

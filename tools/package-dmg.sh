@@ -8,7 +8,7 @@ ditto dist/Pingvi.app "$stage/Pingvi.app"
 ln -s /Applications "$stage/Applications"
 cp docs/PILOT.txt "$stage/Прочитайте перед запуском.txt"
 arch=$(uname -m)
-output="$PWD/dist/Pingvi-0.7.0-beta.5-$arch.dmg"
+output="$PWD/dist/Pingvi-0.7.0-beta.6-$arch.dmg"
 hdiutil create -volname Pingvi -srcfolder "$stage" -ov -format UDZO "$output"
 hdiutil verify "$output"
 if [[ -n "${SIGNING_IDENTITY:-}" ]]; then
@@ -20,5 +20,5 @@ if [[ -n "${NOTARY_PROFILE:-}" ]]; then
     xcrun stapler staple "$output"
     xcrun stapler validate "$output"
 fi
-shasum -a 256 "$output" > "$output.sha256"
+(cd dist && shasum -a 256 "$(basename "$output")") > "$output.sha256"
 printf '%s\n' "$output"
