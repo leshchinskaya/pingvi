@@ -2,6 +2,65 @@ import XCTest
 @testable import AgentAttention
 
 final class DeliveryTests: XCTestCase {
+    func testMarkReadRemovesQuestionFromQueueWithoutAnsweringAndCanBeUndone() throws {
+        try withStore { store in
+            let question = session("waiting", token: "unread")
+            store.merge([question])
+            store.local.drafts[question.token] = ["text": "Later"]
+            store.toggleRead(question)
+            XCTAssertTrue(store.pending.isEmpty)
+            XCTAssertEqual(store.aggregate, "idle")
+            XCTAssertEqual(store.visible.first?.status, "waiting")
+            XCTAssertEqual(store.visible.first?.canReply, question.canReply)
+            XCTAssertEqual(store.local.drafts[question.token]?["text"], "Later")
+            XCTAssertTrue(store.local.uncertain?.isEmpty ?? true)
+            store.merge([question])
+            XCTAssertTrue(store.pending.isEmpty)
+            store.toggleRead(question)
+            XCTAssertEqual(store.pending.map(\.id), [question.id])
+        }
+    }
+
+    func testNewQuestionNeedsAttentionAfterPreviousQuestionWasRead() throws {
+        try withStore { store in
+            let question = session("waiting", token: "unread")
+            store.merge([question])
+            store.toggleRead(question)
+            store.merge([session("waiting", token: "new")])
+            XCTAssertEqual(store.pending.count, 1)
+            store.toggleRead(store.pending[0])
+            store.merge([session("working")])
+            store.merge([session("waiting", token: "new")])
+            XCTAssertEqual(store.pending.count, 1)
+        }
+    }
+
+    func testReadQuestionSurvivesRestartAndDoesNotHideOtherSessions() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = Store(storageDirectory: dir, notificationsEnabled: false)
+        let question = session("waiting", token: "unread")
+        var other = question; other.id = "other"
+        store.merge([question, other])
+        store.toggleRead(question)
+        let restored = Store(storageDirectory: dir, notificationsEnabled: false)
+        restored.merge([question, other])
+        XCTAssertEqual(restored.pending.map(\.id), [other.id])
+        restored.merge([other])
+        XCTAssertNil(restored.local.readQuestions?[question.id])
+    }
+
+    func testMarkReadDoesNotHideUnconfirmedDelivery() throws {
+        try withStore { store in
+            for status in ["checking", "unconfirmed"] {
+                let question = session(status)
+                store.local.sessions = [question]
+                store.toggleRead(question)
+                XCTAssertEqual(store.pending.count, 1)
+            }
+        }
+    }
+
     func testFailedOrDisabledSourceKeepsSessionsUntilSuccessfulRefresh() throws {
         try withStore { store in
             store.local.sessions = [session("done")]

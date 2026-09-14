@@ -37,6 +37,7 @@ struct LocalState: Codable {
     var deliveryStarted: [String: Double]? = [:]
     var comments: [String: [String: String]]? = [:]
     var answeredContext: [String: String]? = [:]
+    var readQuestions: [String: String]? = [:]
 }
 
 final class Bridge {
@@ -89,13 +90,29 @@ final class Store: ObservableObject {
     var visible: [Session] {
         local.sessions.filter { !local.excluded.contains($0.id) && !local.excludedProjects.contains($0.project) && !local.retired.contains($0.id) }
             .sorted { a, b in
-                func rank(_ s: Session) -> Int { s.waiting ? 0 : (s.status == "working" ? 1 : (s.status == "offline" ? 2 : 3)) }
+                func rank(_ s: Session) -> Int { needsAttention(s) ? 0 : (s.status == "working" ? 1 : (s.status == "offline" ? 2 : 3)) }
                 if rank(a) != rank(b) { return rank(a) < rank(b) }
                 let left = local.arrival[a.token] ?? a.updated, right = local.arrival[b.token] ?? b.updated
                 return left == right ? a.id < b.id : left < right
             }
     }
-    var pending: [Session] { visible.filter(\.waiting) }
+    var pending: [Session] { visible.filter { needsAttention($0) } }
+    func isRead(_ s: Session) -> Bool {
+        s.status == "waiting" && local.readQuestions?[s.id] == s.token
+    }
+    func needsAttention(_ s: Session) -> Bool { s.waiting && !isRead(s) }
+    func toggleRead(_ s: Session) {
+        guard let current = local.sessions.first(where: { $0.id == s.id }) else { return }
+        if current.status == "done" { markViewed(current); return }
+        guard current.status == "waiting" else { return }
+        if isRead(current) { local.readQuestions?.removeValue(forKey: current.id) }
+        else {
+            if local.readQuestions == nil { local.readQuestions = [:] }
+            local.readQuestions?[current.id] = current.token
+            local.snoozes.removeValue(forKey: current.token)
+        }
+        save()
+    }
     var current: Session? { visible.first { $0.id == selected } }
     var aggregate: String {
         if !pending.isEmpty { return "waiting" }
@@ -206,6 +223,9 @@ final class Store: ObservableObject {
         var completedReply: String?
         for var s in incoming {
             let previous = old[s.id]
+            if s.status != "waiting" || local.readQuestions?[s.id] != s.token {
+                local.readQuestions?.removeValue(forKey: s.id)
+            }
             if s.kind == "screen" && s.status == "idle" && previous?.status == "working" { s.status = "done" }
             if s.status == "idle", let previous, ["done", "viewed"].contains(previous.status) { s.status = previous.status }
             if s.status == "done" && local.seen.contains(s.id) && previous?.status != "working" { s.status = "viewed" }
@@ -236,6 +256,7 @@ final class Store: ObservableObject {
         for var missing in local.sessions where !ids.contains(missing.id) {
             if completeSources.contains(missing.source) {
                 local.seen.remove(missing.id); local.retired.remove(missing.id)
+                local.readQuestions?.removeValue(forKey: missing.id)
                 local.workspaceAssignments?.removeValue(forKey: missing.id)
                 local.excluded.remove(missing.id); local.names.removeValue(forKey: missing.id)
                 sent.removeValue(forKey: missing.id); local.deliveryStarted?.removeValue(forKey: missing.id)
@@ -258,7 +279,7 @@ final class Store: ObservableObject {
         if !visible.contains(where: { $0.id == selected }) { selected = visible.first?.id }
         for s in visible {
             let previous = old[s.id]
-            if s.status == "waiting" && previous?.token != s.token && !local.dismissed.contains(s.token) && !isVisibleAtSource(s) {
+            if s.status == "waiting" && needsAttention(s) && previous?.token != s.token && !local.dismissed.contains(s.token) && !isVisibleAtSource(s) {
                 if UserDefaults.standard.bool(forKey: "questionNotifications") { notify(s, body: s.question, kind: "question") }
                 if UserDefaults.standard.bool(forKey: "floating") { showQuestion?(s.id) }
             }

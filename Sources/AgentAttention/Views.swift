@@ -47,9 +47,9 @@ struct ContentView: View {
         if workspace == "ungrouped" { return "Без пространства" }
         return store.workspaces.first { $0.id == workspace }?.name ?? "Все пространства"
     }
-    var waitingCount: Int { workspaceSessions.filter(\.waiting).count }
+    var waitingCount: Int { workspaceSessions.filter { store.needsAttention($0) }.count }
     var filtered: [Session] {
-        workspaceSessions.filter { filter.accepts($0) && (search.isEmpty || (store.title($0) + $0.project + $0.agent).localizedCaseInsensitiveContains(search)) }
+        workspaceSessions.filter { (filter == .waiting ? store.needsAttention($0) : filter.accepts($0)) && (search.isEmpty || (store.title($0) + $0.project + $0.agent).localizedCaseInsensitiveContains(search)) }
     }
     var body: some View {
         VStack(spacing: 0) {
@@ -195,12 +195,12 @@ struct ContentView: View {
     }
     var sessionList: some View {
         LazyVStack(alignment: .leading, spacing: 4) {
-            let waiting = filtered.filter { $0.waiting }
+            let waiting = filtered.filter { store.needsAttention($0) }
             if !waiting.isEmpty {
                 sectionLabel("Нужен ответ", count: waiting.count)
                 ForEach(waiting) { row($0) }
             }
-            let active = filtered.filter { !$0.waiting && !["done", "viewed"].contains($0.status) }
+            let active = filtered.filter { !store.needsAttention($0) && !["done", "viewed"].contains($0.status) }
             if !active.isEmpty { sectionLabel("Остальные диалоги", count: active.count).padding(.top, waiting.isEmpty ? 0 : 12) }
             ForEach(active) { row($0) }
             let finished = filtered.filter { ["done", "viewed"].contains($0.status) }
@@ -224,7 +224,7 @@ struct ContentView: View {
     func row(_ s: Session) -> some View {
         Button { store.choose(s); inspecting = true } label: {
             HStack(alignment: .top, spacing: 10) {
-                StatusDot(status: s.status).padding(.top, 4).help(s.question.isEmpty ? s.statusLabel : s.question)
+                StatusDot(status: store.isRead(s) ? "viewed" : s.status).padding(.top, 4).help(s.question.isEmpty ? s.statusLabel : s.question)
                 VStack(alignment: .leading, spacing: 5) {
                     Text(store.title(s)).font(.system(size: 13, weight: .semibold)).lineLimit(2)
                     Text(s.agent.capitalized + " · " + (s.project.isEmpty ? s.source : URL(fileURLWithPath: s.project).lastPathComponent)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
@@ -233,9 +233,9 @@ struct ContentView: View {
                     }
                     if s.waiting && !s.question.isEmpty { Text(s.question).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(2) }
                     HStack(spacing: 4) {
-                        Text(s.statusLabel).lineLimit(1)
+                        Text(store.isRead(s) ? "Прочитано · можно ответить позже" : s.statusLabel).lineLimit(1)
                         if let at = store.local.arrival[s.token], s.waiting { Text("·"); Text(Date(timeIntervalSince1970: at), style: .relative).lineLimit(1) }
-                    }.font(.system(size: 10)).foregroundStyle(stateColor(s.status))
+                    }.font(.system(size: 10)).foregroundStyle(stateColor(store.isRead(s) ? "viewed" : s.status))
                     if let due = store.local.snoozes[s.token] {
                         Label("Напомнить в " + Date(timeIntervalSince1970: due).formatted(date: .omitted, time: .shortened), systemImage: "clock").font(.system(size: 10)).foregroundStyle(.secondary)
                     }
@@ -246,6 +246,7 @@ struct ContentView: View {
                 .background(store.selected == s.id ? Palette.selection : .clear, in: RoundedRectangle(cornerRadius: 10))
                 .overlay(alignment: .leading) { if store.selected == s.id { Capsule().fill(Palette.accent).frame(width: 3, height: 28) } }
         }.buttonStyle(.plain).contextMenu {
+            SessionReadAction(store: store, session: s)
             Button("Переименовать") { renamingSession = s }
             Menu("Рабочее пространство") {
                 Button("Без пространства") { store.assign(s, to: nil) }
@@ -259,6 +260,19 @@ struct ContentView: View {
             Button("Исключить сессию") { store.exclude(s) }
             if !s.project.isEmpty { Button("Исключить проект") { store.exclude(s, project: true) } }
             if ["done", "viewed"].contains(s.status) { Button("Убрать из списка") { store.retire(s) } }
+        }
+    }
+}
+
+struct SessionReadAction: View {
+    @ObservedObject var store: Store
+    let session: Session
+    var body: some View {
+        if session.status == "waiting" || session.status == "done" {
+            Button { store.toggleRead(session) } label: {
+                Label(store.isRead(session) ? "Вернуть в непрочитанные" : "Отметить прочитанной",
+                      systemImage: store.isRead(session) ? "envelope.badge" : "envelope.open")
+            }
         }
     }
 }
@@ -363,6 +377,7 @@ struct QuestionView: View {
                 Text(store.title(session)).font(.system(size: 23, weight: .semibold)).textSelection(.enabled)
                 projectLabel
             }
+            SessionReadAction(store: store, session: session)
             if renaming {
                 HStack { TextField("Название", text: $newName); Button("Сохранить") { store.local.names[session.id] = newName; store.save(); renaming = false } }
             }

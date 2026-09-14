@@ -156,7 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
     func showPanel(_ id: String, switching: Bool = false) {
         guard switching || !NSApp.isActive || panel?.isVisible == true else { return }
-        if !switching, panel?.isVisible == true, let active = panelSession, store.visible.contains(where: { $0.id == active && $0.waiting }) { return }
+        if !switching, panel?.isVisible == true, let active = panelSession, store.visible.contains(where: { $0.id == active && store.needsAttention($0) }) { return }
         guard let s = store.visible.first(where: { $0.id == id }) else { return }
         panelSession = id
         if panel == nil {
@@ -171,7 +171,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func refresh() {
         refreshTheme()
         let count = store.pending.count
-        let dockCount = store.visible.filter { $0.status == "waiting" }.count
+        let dockCount = store.pending.filter { $0.status == "waiting" }.count
         let dockVisible = UserDefaults.standard.bool(forKey: "dock")
         let menuVisible = UserDefaults.standard.bool(forKey: "menubar")
         let indicator = "\(store.aggregate):\(count):\(dockCount):\(dockVisible):\(menuVisible):\(IconAppearance.shared.selected.rawValue)"
@@ -196,7 +196,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         })
         NSApp.dockTile.contentView = dockView; NSApp.dockTile.display()
         }
-        if let id = panelSession, !store.visible.contains(where: { $0.id == id && $0.waiting }) {
+        if let id = panelSession, !store.visible.contains(where: { $0.id == id && store.needsAttention($0) }) {
             panel?.orderOut(nil); panelSession = nil
             if UserDefaults.standard.bool(forKey: "floating"), let next = store.pending.first(where: { !store.local.dismissed.contains($0.token) }) { showPanel(next.id) }
         }
