@@ -374,6 +374,7 @@ private struct SettingsSectionIcon: View {
 
 struct SettingsView: View {
     @ObservedObject var store: Store
+    var preview = false
     @ObservedObject private var appearance = IconAppearance.shared
     @State private var page: SettingsPage? = UserDefaults.standard.bool(forKey: "setupComplete") ? .general : .connections
     @State private var search = ""
@@ -414,9 +415,9 @@ struct SettingsView: View {
                     } icon: {
                         SettingsSectionIcon(page: item)
                     }.padding(.vertical, 3).tag(item)
-                }.listStyle(.sidebar)
+                }.listStyle(.sidebar).scrollContentBackground(.hidden)
             }.frame(width: 210).frame(maxHeight: .infinity)
-                .background(.regularMaterial)
+                .background(LinearGradient(colors: [Palette.sidebar, Palette.canvas], startPoint: .topLeading, endPoint: .bottomTrailing))
             Divider()
             VStack(spacing: 0) {
                 HStack { Text((page ?? .general).rawValue).font(.system(size: 26, weight: .bold, design: .rounded)); Spacer() }.padding(22)
@@ -456,7 +457,7 @@ struct SettingsView: View {
             .onChange(of: menubar) { _, _ in store.onChange?() }
             .onChange(of: terminal) { _, _ in store.poll() }
             .onChange(of: theme) { _, _ in store.onChange?() }
-            .onAppear { refreshAuthorization() }
+            .onAppear { if !preview { refreshAuthorization() } }
     }
     var general: some View {
         Group {

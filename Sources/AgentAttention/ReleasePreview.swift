@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Render the actual data controls with fixture counts, without polling user sessions.
 enum ReleasePreview {
-    static func captureDashboard(to destination: URL, floating: Bool = false, dark: Bool = false, approval: Bool = false) throws {
+    static func captureDashboard(to destination: URL, floating: Bool = false, dark: Bool = false, approval: Bool = false, settings: Bool = false) throws {
         let app = NSApplication.shared
         app.setActivationPolicy(.prohibited)
         app.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
@@ -40,7 +40,7 @@ enum ReleasePreview {
         store.local.drafts = [question.token: ["layout": "Карточки"]]
         store.selected = question.id
         let size = NSSize(width: floating ? 1120 : 1020, height: floating ? 760 : 680)
-        let content = floating
+        let content = settings ? AnyView(SettingsView(store: store, preview: true)) : floating
             ? AnyView(FloatingPreviewScene(store: store, id: question.id))
             : AnyView(ContentView(store: store))
         let view = NSHostingView(rootView: content.frame(width: size.width, height: size.height))
