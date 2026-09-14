@@ -11,7 +11,7 @@ Pingvi показывает, какой агент ждёт вашего отв�
 ![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-arm64-335cff?style=flat-square)
 ![Status: Beta](https://img.shields.io/badge/status-beta-9d7bff?style=flat-square)
 
-[Возможности](#возможности) · [Подключения](#подключения) · [Установка](#установка) · [Разработка](docs/DEVELOPMENT.md) · [Сообщить об ошибке](https://github.com/leshchinskaya/pingvi/issues)
+[Возможности](#возможности) · [Подключения](#подключения) · [Установка](#установка) · [Скачать DMG](https://github.com/leshchinskaya/pingvi/releases) · [Разработка](docs/DEVELOPMENT.md) · [Сообщить об ошибке](https://github.com/leshchinskaya/pingvi/issues)
 
 </div>
 
@@ -67,6 +67,10 @@ Pingvi показывает, какой агент ждёт вашего отв�
 **Pingvi находится в beta.** Распознавание вопросов зависит от интерфейса CLI. Если результат отправки неизвестен, приложение предлагает проверить исходную сессию и не повторяет отправку автоматически.
 
 ## Установка
+
+**[Скачать Pingvi 0.7.0 beta 3 — DMG для Apple Silicon](https://github.com/leshchinskaya/pingvi/releases/download/v0.7.0-beta.3/Pingvi-0.7.0-beta.3-arm64.dmg)**
+
+[Все версии и контрольные суммы SHA-256 — в GitHub Releases](https://github.com/leshchinskaya/pingvi/releases).
 
 Для запуска нужны **Mac с Apple Silicon и macOS 14+**, а также установленный и авторизованный **Claude Code или Codex CLI**. Для подключения сессий herdr и создания в нём диалогов установите herdr отдельно.
 
