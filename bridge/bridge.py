@@ -439,11 +439,11 @@ def main():
             result = uninstall()
         elif action == 'snapshot':
             result = snapshot(data)
-        elif action in ('chat-history', 'chat-send', 'chat-create', 'chat-acknowledge'):
+        elif action in ('question-context', 'chat-history', 'chat-send', 'chat-create', 'chat-acknowledge'):
             import chat
             import maintenance
             with maintenance.guard():
-                result = {'chat-history': chat.history, 'chat-send': chat.send, 'chat-create': chat.create, 'chat-acknowledge': chat.acknowledge}[action](data)
+                result = {'question-context': chat.question_context, 'chat-history': chat.history, 'chat-send': chat.send, 'chat-create': chat.create, 'chat-acknowledge': chat.acknowledge}[action](data)
         elif action == 'reply':
             result = reply(data)
         elif action == 'focus':

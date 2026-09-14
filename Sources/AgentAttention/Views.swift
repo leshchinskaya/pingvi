@@ -384,6 +384,7 @@ struct QuestionView: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    if session.waiting { QuestionContextView(session: session) }
                     if !session.question.isEmpty && (session.fields.isEmpty || session.kind != "hook") {
                         if session.kind == "screen" && !compact {
                             RecentContextView(text: session.question, previous: session.options.isEmpty ? store.local.answeredContext?[session.id] : nil)

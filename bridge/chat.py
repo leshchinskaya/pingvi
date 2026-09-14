@@ -133,6 +133,34 @@ def read_messages(path, agent):
             else: messages[old] = record
     return messages[-200:], partial or len(messages) > 200
 
+def question_context(data):
+    """Read native messages only; never reconcile receipts or send terminal input."""
+    session = data['session']
+    path = transcript(session)
+    if path is None:
+        return dict(user='', assistant='', partial=True)
+    messages, partial = read_messages(path, session['agent'])
+    # Do not borrow an assistant response from a previous user turn.
+    start = next((i for i in range(len(messages) - 1, -1, -1)
+                  if messages[i]['role'] == 'user'), None)
+    user = messages[start]['text'] if start is not None else ''
+    candidates = messages[start + 1:] if start is not None else messages
+    questions = [session.get('question', '')] + [f.get('label', '') for f in session.get('fields', [])]
+    assistant = ''
+    for message in candidates:
+        if message['role'] != 'assistant':
+            continue
+        text = message['text'].strip()
+        offsets = [text.find(q.strip()) for q in questions if q.strip() and q.strip() in text]
+        if offsets:
+            text = text[:min(offsets)].strip()
+            if text:
+                assistant = text
+            break  # Never include text after the current question.
+        assistant = text
+    return dict(user=user, assistant=assistant, partial=partial)
+
+
 def receipts(session):
     result = []
     for path in (b.ROOT / 'chat-requests').glob('*.json'):
