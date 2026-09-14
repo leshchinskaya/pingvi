@@ -36,6 +36,7 @@ struct ContentView: View {
     @State private var inspecting = false
     @AppStorage("chatEnabled") private var chatEnabled = false
     @State private var newChat = false
+    @State private var renamingSession: Session?
     @AppStorage("setupComplete") private var setupComplete = false
     @FocusState private var searching: Bool
     var workspaceSessions: [Session] {
@@ -128,6 +129,9 @@ struct ContentView: View {
                 if workspace != "all" && workspace != "ungrouped" && !groups.contains(where: { $0.id == workspace }) { workspace = "all" }
             }
             .sheet(isPresented: $newChat) { NewChatView(store: store) }
+            .sheet(item: $renamingSession) { session in
+                RenameSessionView(store: store, session: session)
+            }
             .onChange(of: chatEnabled) { _, enabled in if !enabled { newChat = false } }
     }
     var sidebar: some View {
@@ -242,6 +246,7 @@ struct ContentView: View {
                 .background(store.selected == s.id ? Palette.selection : .clear, in: RoundedRectangle(cornerRadius: 10))
                 .overlay(alignment: .leading) { if store.selected == s.id { Capsule().fill(Palette.accent).frame(width: 3, height: 28) } }
         }.buttonStyle(.plain).contextMenu {
+            Button("Переименовать") { renamingSession = s }
             Menu("Рабочее пространство") {
                 Button("Без пространства") { store.assign(s, to: nil) }
                 ForEach(store.workspaces) { group in
@@ -255,6 +260,45 @@ struct ContentView: View {
             if !s.project.isEmpty { Button("Исключить проект") { store.exclude(s, project: true) } }
             if ["done", "viewed"].contains(s.status) { Button("Убрать из списка") { store.retire(s) } }
         }
+    }
+}
+
+struct RenameSessionView: View {
+    @ObservedObject var store: Store
+    let session: Session
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String
+    @FocusState private var editing: Bool
+
+    init(store: Store, session: Session) {
+        self.store = store
+        self.session = session
+        _name = State(initialValue: store.title(session))
+    }
+
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Переименовать сессию").font(.headline)
+            TextField("Название", text: $name).focused($editing)
+                .onSubmit { save() }
+            HStack {
+                Spacer()
+                Button("Отмена") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Сохранить") { save() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(trimmedName.isEmpty)
+            }
+        }.padding(24).frame(width: 360)
+            .onAppear { editing = true }
+    }
+
+    private func save() {
+        guard !trimmedName.isEmpty else { return }
+        store.local.names[session.id] = trimmedName
+        store.save()
+        dismiss()
     }
 }
 

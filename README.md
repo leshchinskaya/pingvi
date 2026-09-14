@@ -85,9 +85,9 @@ Pingvi показывает, какой агент ждёт вашего отв�
 
 ## Установка
 
-**0.7.0 beta 6**: форматирование сообщений Markdown и подсветка добавленных и удалённых строк, включая терминальные изменения с номерами строк. Скриншоты выше показывают интерфейс beta 5.
+**0.7.0 beta 7**: переименование сессии через карандаш рядом с названием чата или меню по правому клику в списке диалогов. Скриншоты выше показывают интерфейс beta 5.
 
-**[Скачать Pingvi 0.7.0 beta 6 — DMG для Apple Silicon](https://github.com/leshchinskaya/pingvi/releases/download/v0.7.0-beta.6/Pingvi-0.7.0-beta.6-arm64.dmg)**
+**[Скачать Pingvi 0.7.0 beta 7 — DMG для Apple Silicon](https://github.com/leshchinskaya/pingvi/releases/download/v0.7.0-beta.7/Pingvi-0.7.0-beta.7-arm64.dmg)**
 
 [Все версии и контрольные суммы SHA-256 — в GitHub Releases](https://github.com/leshchinskaya/pingvi/releases).
 
@@ -105,7 +105,7 @@ cd pingvi
 bash tools/package-dmg.sh
 ```
 
-Готовый образ `dist/Pingvi-0.7.0-beta.6-arm64.dmg` и файл контрольной суммы `.sha256` появятся после сборки.
+Готовый образ `dist/Pingvi-0.7.0-beta.7-arm64.dmg` и файл контрольной суммы `.sha256` появятся после сборки.
 
 ### Первый запуск
 

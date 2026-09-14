@@ -143,6 +143,7 @@ struct ChatView: View {
     @StateObject private var model = ChatModel()
     @ObservedObject private var preferences = ChatPreferences.shared
     @State private var showRequest = false
+    @State private var renamingSession: Session?
     @State private var visibleMessage: String?
     @State private var positioned = false
     @State private var readingReply: String?
@@ -161,11 +162,20 @@ struct ChatView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(store.title(session)).font(.title3.weight(.semibold)).lineLimit(2)
+                    HStack(spacing: 8) {
+                        Text(store.title(session)).font(.title3.weight(.semibold)).lineLimit(2)
+                        Button { renamingSession = session } label: { Image(systemName: "pencil") }
+                            .buttonStyle(.borderless)
+                            .help("Переименовать сессию")
+                            .accessibilityLabel("Переименовать сессию")
+                    }
                     Text(session.agent.capitalized + " · " + (session.project.isEmpty ? session.source : URL(fileURLWithPath: session.project).lastPathComponent)).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button { store.open(session) } label: { Image(systemName: "arrow.up.forward.app") }.help("Открыть исходную сессию")
+            }
+            .sheet(item: $renamingSession) { session in
+                RenameSessionView(store: store, session: session)
             }
             if requestPending {
                 Button { showRequest = true } label: {

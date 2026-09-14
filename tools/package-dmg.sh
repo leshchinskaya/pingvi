@@ -8,7 +8,7 @@ ditto dist/Pingvi.app "$stage/Pingvi.app"
 ln -s /Applications "$stage/Applications"
 cp docs/PILOT.txt "$stage/Прочитайте перед запуском.txt"
 arch=$(uname -m)
-output="$PWD/dist/Pingvi-0.7.0-beta.6-$arch.dmg"
+output="$PWD/dist/Pingvi-0.7.0-beta.7-$arch.dmg"
 hdiutil create -volname Pingvi -srcfolder "$stage" -ov -format UDZO "$output"
 hdiutil verify "$output"
 if [[ -n "${SIGNING_IDENTITY:-}" ]]; then
