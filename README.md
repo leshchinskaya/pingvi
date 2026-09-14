@@ -85,9 +85,9 @@ Pingvi показывает, какой агент ждёт вашего отв�
 
 ## Установка
 
-В `main` подготовлена **0.7.0 beta 5**: компактный переключатель пространств и исправленный выбор файлов во всплывающей карточке. Скриншоты выше показывают эту сборку. Для скачивания пока доступна beta 4; beta 5 можно собрать из исходников.
+**0.7.0 beta 5**: компактный переключатель пространств и исправленный выбор файлов во всплывающей карточке. Скриншоты выше показывают эту сборку.
 
-**[Скачать Pingvi 0.7.0 beta 4 — DMG для Apple Silicon](https://github.com/leshchinskaya/pingvi/releases/download/v0.7.0-beta.4/Pingvi-0.7.0-beta.4-arm64.dmg)**
+**[Скачать Pingvi 0.7.0 beta 5 — DMG для Apple Silicon](https://github.com/leshchinskaya/pingvi/releases/download/v0.7.0-beta.5/Pingvi-0.7.0-beta.5-arm64.dmg)**
 
 [Все версии и контрольные суммы SHA-256 — в GitHub Releases](https://github.com/leshchinskaya/pingvi/releases).
 
