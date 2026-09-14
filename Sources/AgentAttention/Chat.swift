@@ -24,6 +24,8 @@ final class ChatPreferences: ObservableObject {
     static let shared = ChatPreferences()
     struct Saved: Codable {
         var drafts: [String: String] = [:]
+        var reading: [String: ChatReadingBookmark]? = [:]
+        var replyBoundaries: [String: String]? = [:]
         var recentProjects: [String] = []
         var recentProjectsInitialized: Bool? = false
         var agent = "codex"
@@ -32,6 +34,7 @@ final class ChatPreferences: ObservableObject {
     }
     @Published var saved = Saved()
     private let file: URL
+    var latestMessages: [String: String] = [:]
     init(storageDirectory: URL = Bridge.root) {
         file = storageDirectory.appendingPathComponent("chat-ui.json")
         if let data = try? Data(contentsOf: file), let value = try? JSONDecoder().decode(Saved.self, from: data) { saved = value } }
@@ -48,13 +51,19 @@ final class ChatPreferences: ObservableObject {
     }
     func clearDrafts() throws {
         var clean = saved
-        clean.drafts = [:]; clean.firstMessage = ""; clean.project = ""; clean.recentProjects = []; clean.recentProjectsInitialized = true
+        clean.drafts = [:]; clean.reading = [:]; clean.replyBoundaries = [:]; clean.firstMessage = ""; clean.project = ""; clean.recentProjects = []; clean.recentProjectsInitialized = true
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         try JSONEncoder().encode(clean).write(to: file, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
         saved = clean; persistenceError = nil
     }
     @Published var persistenceError: String?
+    func markReply(_ session: Session) {
+        guard let id = latestMessages[Self.key(session)] else { return }
+        if saved.replyBoundaries == nil { saved.replyBoundaries = [:] }
+        saved.replyBoundaries?[Self.key(session)] = id
+        save()
+    }
     func draft(_ session: Session) -> String { saved.drafts[Self.key(session)] ?? "" }
     func setDraft(_ text: String, for session: Session) { saved.drafts[Self.key(session)] = text; save() }
 }
@@ -90,6 +99,13 @@ final class ChatModel: ObservableObject {
             do {
                 let receipt = try JSONDecoder().decode(ChatReceipt.self, from: result.get())
                 self.history?.canSend = false
+                if receipt.state == "submitted" {
+                    var contextSession = session
+                    contextSession.detail = self.history?.context ?? session.detail
+                    store.rememberAnsweredContext(contextSession)
+                    preferences.markReply(session)
+                    store.save()
+                }
                 if receipt.state == "submitted" && preferences.draft(session).trimmingCharacters(in: .whitespacesAndNewlines) == text { preferences.setDraft("", for: session) }
                 self.error = receipt.error.map { "Результат отправки неизвестен. Проверьте сессию. " + $0 }
                 store.poll()
@@ -125,7 +141,18 @@ struct ChatView: View {
     @StateObject private var model = ChatModel()
     @ObservedObject private var preferences = ChatPreferences.shared
     @State private var showRequest = false
-    @State private var nearBottom = true
+    @State private var visibleMessage: String?
+    @State private var positioned = false
+    @State private var readingReply: String?
+    var messages: [ChatMessage] { model.history?.messages ?? [] }
+    var replyBoundary: String? { preferences.saved.replyBoundaries?[ChatPreferences.key(session)] }
+    var firstNew: String? { ChatReading.firstNew(in: messages, afterMessage: replyBoundary) }
+    func rememberPosition() {
+        guard positioned else { return }
+        if preferences.saved.reading == nil { preferences.saved.reading = [:] }
+        preferences.saved.reading?[ChatPreferences.key(session)] = ChatReadingBookmark(replyID: readingReply, visibleID: visibleMessage)
+        preferences.save()
+    }
     var requestPending: Bool { session.waiting && (!session.options.isEmpty || session.kind == "hook") }
     var draft: Binding<String> { Binding(get: { preferences.draft(session) }, set: { preferences.setDraft($0, for: session) }) }
     var body: some View {
@@ -153,10 +180,11 @@ struct ChatView: View {
                     LazyVStack(alignment: .leading, spacing: 18) {
                         if model.history == nil && model.error == nil { ProgressView("Загружаем переписку…").frame(maxWidth: .infinity).padding(30) }
                         if let h = model.history, !h.context.isEmpty {
-                            DisclosureGroup("Доступный контекст терминала") { Text(h.context).font(.system(size: 11, design: .monospaced)).textSelection(.enabled) }.font(.caption)
+                            RecentContextView(text: h.context, previous: store.local.answeredContext?[session.id], monospaced: true)
                         }
-                        ForEach(model.history?.messages ?? []) { message in
+                        ForEach(messages) { message in
                             VStack(alignment: .leading, spacing: 6) {
+                                if message.id == firstNew { NewContentDivider() }
                                 Text(message.role == "user" ? "Вы" : session.agent.capitalized).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                                 Text(message.text).font(.system(size: 14)).lineSpacing(4).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                                 if message.state == "submitted" || message.state == "uncertain" {
@@ -168,17 +196,37 @@ struct ChatView: View {
                                 }
                                 if message.state == "checked" { Text("Проверено вами в исходной сессии").font(.caption2).foregroundStyle(.secondary) }
                             }.padding(message.role == "user" ? 13 : 0)
-                                .background(message.role == "user" ? Palette.selection : .clear, in: RoundedRectangle(cornerRadius: 14))
+                                .background(message.role == "user" ? Palette.selection : .clear, in: RoundedRectangle(cornerRadius: 14)).id(message.id)
                         }
                         if model.history?.messages.isEmpty == true && model.history?.context.isEmpty == true {
                             Text("Сообщения появятся здесь. Можно написать первое сообщение, когда агент готов.").font(.callout).foregroundStyle(.secondary).padding(.vertical, 24)
                         }
                         if model.history?.busy == true { Label("Агент пишет…", systemImage: "ellipsis.bubble").font(.caption).foregroundStyle(.secondary) }
-                        Color.clear.frame(height: 1).id("bottom").onAppear { nearBottom = true }.onDisappear { nearBottom = false }
-                    }.padding(.vertical, 8)
-                }.defaultScrollAnchor(.bottom)
-                    .onChange(of: model.history?.messages.last?.id) { _, _ in if nearBottom { reader.scrollTo("bottom", anchor: .bottom) } }
-                if !nearBottom { Button("К последним сообщениям") { reader.scrollTo("bottom", anchor: .bottom) }.font(.caption) }
+                        Color.clear.frame(height: 1).id("bottom")
+                    }.scrollTargetLayout().padding(.vertical, 8)
+                }.scrollPosition(id: $visibleMessage, anchor: .top)
+                    .onChange(of: messages.map(\.id)) { _, _ in
+                        if let last = messages.last { preferences.latestMessages[ChatPreferences.key(session)] = last.id }
+                        guard !positioned, !messages.isEmpty else { return }
+                        let bookmark = preferences.saved.reading?[ChatPreferences.key(session)]
+                        let target = ChatReading.initialTarget(in: messages, bookmark: bookmark, afterMessage: replyBoundary)
+                        readingReply = ChatReading.lastReply(in: messages, afterMessage: replyBoundary)
+                        positioned = true
+                        visibleMessage = target
+                        if let target { reader.scrollTo(target, anchor: .top) }
+                    }
+                    .onChange(of: store.readingRequest) { _, _ in
+                        guard !messages.isEmpty else { return }
+                        readingReply = ChatReading.lastReply(in: messages, afterMessage: replyBoundary)
+                        if let target = firstNew ?? messages.last?.id { reader.scrollTo(target, anchor: .top) }
+                    }
+                HStack {
+                    if let firstNew = firstNew {
+                        Button("К новому после ответа") { reader.scrollTo(firstNew, anchor: .top) }
+                    }
+                    Spacer()
+                    Button("К последним сообщениям") { reader.scrollTo("bottom", anchor: .bottom) }
+                }.font(.caption)
             }
             if let error = model.error ?? preferences.persistenceError { Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
             VStack(alignment: .leading, spacing: 8) {
@@ -202,6 +250,7 @@ struct ChatView: View {
                 QuestionView(store: store, session: store.local.sessions.first(where: { $0.id == session.id }) ?? session)
             }.padding(24).frame(width: 530, height: 620)
         }.onChange(of: requestPending) { _, waiting in if !waiting { showRequest = false } }
+            .onDisappear { rememberPosition() }
     }
 }
 

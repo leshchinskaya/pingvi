@@ -104,3 +104,14 @@ struct ToolbarAction: View {
             .onHover { hovering = $0 }.disabled(disabled).opacity(disabled ? 0.4 : 1).help(title).accessibilityLabel(title)
     }
 }
+
+struct ReplyButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 16).padding(.vertical, 10)
+            .foregroundStyle(isEnabled ? Color.white : Color.secondary)
+            .background(isEnabled ? Palette.action.opacity(configuration.isPressed ? 0.8 : 1) : Palette.input, in: RoundedRectangle(cornerRadius: 12))
+            .contentShape(RoundedRectangle(cornerRadius: 12))
+    }
+}

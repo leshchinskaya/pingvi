@@ -219,7 +219,11 @@ struct QuestionView: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    if !session.question.isEmpty && (session.fields.isEmpty || session.kind != "hook") { Text(session.question).font(.system(size: 14)).lineSpacing(5).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
+                    if !session.question.isEmpty && (session.fields.isEmpty || session.kind != "hook") {
+                        if session.kind == "screen" {
+                            RecentContextView(text: session.question, previous: session.options.isEmpty ? store.local.answeredContext?[session.id] : nil)
+                        } else { Text(session.question).font(.system(size: 14)).lineSpacing(5).textSelection(.enabled) }
+                    }
                     if !session.waiting && session.status != "offline" {
                         VStack(spacing: 16) {
                             Image(systemName: session.status == "working" ? "sparkles" : (session.status == "done" ? "checkmark.bubble.fill" : "bubble.left.and.bubble.right"))
@@ -240,22 +244,35 @@ struct QuestionView: View {
                                         var values = store.draft(session, field: field.id).components(separatedBy: ", ").filter { !$0.isEmpty }
                                         if values.contains(option.label) { values.removeAll { $0 == option.label } } else { values.append(option.label) }
                                         store.setDraft(session, field: field.id, value: values.joined(separator: ", "))
-                                    } else { store.setDraft(session, field: field.id, value: option.label) }
+                                    } else { store.setDraft(session, field: field.id, value: selected(option, in: field) ? "" : option.label) }
                                 } label: {
                                     HStack(alignment: .top, spacing: 9) {
                                         Image(systemName: selected(option, in: field) ? (field.multi ? "checkmark.square.fill" : "checkmark.circle.fill") : (field.multi ? "square" : "circle")).foregroundStyle(selected(option, in: field) ? Palette.accent : Color.secondary).padding(.top, 2)
                                         VStack(alignment: .leading, spacing: 4) { Text(option.label).fontWeight(.medium); if let description = option.description { Text(description).font(.caption).foregroundStyle(.secondary) } }.frame(maxWidth: .infinity, alignment: .leading)
                                     }.padding(14).surface(radius: 16, selected: selected(option, in: field))
-                                }.buttonStyle(.plain).disabled(!session.canReply).accessibilityAddTraits(selected(option, in: field) ? .isSelected : [])
+                                }.buttonStyle(.plain).disabled(!session.canReply || store.submitting.contains(session.id)).accessibilityAddTraits(selected(option, in: field) ? .isSelected : [])
                             }
-                            TextField("Свой ответ или уточнение", text: Binding(get: { store.draft(session, field: field.id) }, set: { store.setDraft(session, field: field.id, value: $0) }), axis: .vertical).textFieldStyle(.roundedBorder).lineLimit(2...5).disabled(!session.canReply)
+                            TextField(field.options.isEmpty ? "Ваш ответ…" : "Дополнить ответ…", text: Binding(
+                                get: { field.options.isEmpty ? store.draft(session, field: field.id) : store.comment(session, field: field.id) },
+                                set: { if field.options.isEmpty { store.setDraft(session, field: field.id, value: $0) } else { store.setComment(session, field: field.id, value: $0) } }
+                            ), axis: .vertical).textFieldStyle(.plain).lineLimit(2...5).padding(12).background(Palette.input.opacity(0.45), in: RoundedRectangle(cornerRadius: 10)).disabled(!session.canReply || store.submitting.contains(session.id))
+                            if !field.options.isEmpty { Text("Можно дополнить выбранный вариант или написать свой ответ.").font(.caption).foregroundStyle(.secondary) }
+                        }
+                    }
+                    if !session.fields.isEmpty {
+                        HStack {
+                            Button { store.reply(session) } label: { Label(store.submitting.contains(session.id) ? "Отправляем…" : "Отправить ответ", systemImage: "paperplane.fill").fontWeight(.semibold).padding(.vertical, 4) }.buttonStyle(ReplyButtonStyle()).controlSize(.large).keyboardShortcut(.return, modifiers: .command).help("Отправить ответ · ⌘Enter").disabled(!session.canReply || store.answers(session).values.contains { $0.isEmpty } || store.submitting.contains(session.id))
+                            Spacer()
+                            if session.fields.contains(where: { !store.draft(session, field: $0.id).isEmpty || !store.comment(session, field: $0.id).isEmpty }) { Label("Черновик сохранён", systemImage: "checkmark").font(.caption2).foregroundStyle(.secondary) }
                         }
                     }
                     if !session.detail.isEmpty {
                         DisclosureGroup("Подробности действия и контекст", isExpanded: $details) {
                             VStack(alignment: .leading, spacing: 8) {
                                 Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(session.detail, forType: .string) } label: { Label("Копировать", systemImage: "doc.on.doc") }.controlSize(.small)
-                                Text(session.detail).font(.system(size: 11, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                                if session.kind == "screen" {
+                                    RecentContextView(text: session.detail, previous: session.options.isEmpty ? store.local.answeredContext?[session.id] : nil, monospaced: true)
+                                } else { Text(session.detail).font(.system(size: 11, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
                             }.padding(12).background(Palette.sidebar.opacity(0.6), in: RoundedRectangle(cornerRadius: 10)).padding(.top, 8)
                         }.font(.caption)
                     }
@@ -271,22 +288,16 @@ struct QuestionView: View {
                     Button { store.reply(session, answer: option.id) } label: { Text(option.label).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 3) }.buttonStyle(.bordered).disabled(!session.canReply || store.submitting.contains(session.id))
                 } }
             }
-            if !session.fields.isEmpty {
-                HStack {
-                    Button { store.reply(session) } label: { Label("Отправить ответ", systemImage: "paperplane.fill") }.actionStyle(prominent: true).controlSize(.large).keyboardShortcut(.return, modifiers: .command).help("Отправить ответ · ⌘Enter").disabled(!session.canReply || session.fields.contains { store.draft(session, field: $0.id).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } || store.submitting.contains(session.id))
-                    Spacer()
-                    if session.fields.contains(where: { !store.draft(session, field: $0.id).isEmpty }) { Label("Черновик сохранён", systemImage: "checkmark").font(.caption2).foregroundStyle(.secondary) }
-                }
-            }
             HStack {
-                Button { store.open(session) } label: { Label("Открыть сессию", systemImage: "arrow.up.forward.app") }.actionStyle()
+                Button { store.open(session) } label: { Label("Открыть сессию", systemImage: "arrow.up.forward.app").foregroundStyle(Palette.accent) }.buttonStyle(.plain)
                 Spacer()
                 if session.waiting {
                     Menu { ForEach([5, 15, 30, 60], id: \.self) { minutes in Button("Через \(minutes) мин") { store.snooze(session, minutes: Double(minutes)) } } } label: { Label("Позже", systemImage: "clock") }.menuStyle(.borderlessButton).fixedSize().help("Напомнить об этом вопросе позже")
                     Button("Скрыть") { store.dismiss(session) }.help("Убрать карточку, сохранив вопрос в очереди")
                 }
             }.controlSize(.regular).padding(.top, 6)
-        }
+        }.onAppear { store.separateLegacyComments(session) }
+            .onChange(of: session.token) { _, _ in store.separateLegacyComments(session) }
     }
 }
 

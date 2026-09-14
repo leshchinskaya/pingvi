@@ -83,6 +83,65 @@ final class DeliveryTests: XCTestCase {
             XCTAssertTrue(store.local.seen.isEmpty)
         }
     }
+    func testProgressAdvancesQueueButUncertaintyDoesNot() throws {
+        for progressed in [false, true] {
+            try withStore { store in
+                var next = session("waiting", token: "next"); next.id = "next"
+                store.selected = "test"
+                store.advanceAfterReply = ["test": "old"]
+                store.local.deliveryStarted = ["test": Date().timeIntervalSince1970]
+                store.merge([session(progressed ? "working" : "waiting"), next])
+                XCTAssertEqual(store.selected, progressed ? "next" : "test")
+            }
+        }
+    }
+    func testManualNavigationCancelsPendingAutomaticAdvance() throws {
+        try withStore { store in
+            store.selected = "test"
+            store.advanceAfterReply = ["test": "old"]
+            store.selected = "another"
+            store.selected = "test"
+            var next = session("waiting", token: "next"); next.id = "next"
+            store.merge([session("working"), next])
+            XCTAssertEqual(store.selected, "test")
+        }
+    }
+    func testUnknownDeliveryDoesNotAdvanceAfterLaterProgress() throws {
+        try withStore { store in
+            store.selected = "test"
+            store.advanceAfterReply = ["test": "old"]
+            var next = session("waiting", token: "next"); next.id = "next"
+            store.merge([session("waiting"), next])
+            store.merge([session("working"), next])
+            XCTAssertEqual(store.selected, "test")
+        }
+    }
+    func testChoiceAndCommentAreSeparateAndPersistTogether() throws {
+        try withStore { store in
+            var question = session("waiting", token: "question")
+            question.fields = [QuestionField(id: "layout", label: "Layout", options: [FieldOption(label: "Cards")], multi: false)]
+            store.setDraft(question, field: "layout", value: "Cards")
+            store.setComment(question, field: "layout", value: "Keep dates visible")
+            XCTAssertEqual(store.draft(question, field: "layout"), "Cards")
+            XCTAssertEqual(store.answers(question)["layout"], "Cards — Keep dates visible")
+            store.setDraft(question, field: "layout", value: "")
+            XCTAssertEqual(store.answers(question)["layout"], "Keep dates visible")
+            store.local.sessions = [question]
+            store.merge([question])
+            XCTAssertEqual(store.comment(question, field: "layout"), "Keep dates visible")
+        }
+    }
+    func testLegacyCustomAnswerStaysVisibleAsComment() throws {
+        try withStore { store in
+            var question = session("waiting", token: "question")
+            question.fields = [QuestionField(id: "layout", label: "Layout", options: [FieldOption(label: "Cards")], multi: false)]
+            store.setDraft(question, field: "layout", value: "Something else")
+            store.separateLegacyComments(question)
+            XCTAssertEqual(store.comment(question, field: "layout"), "Something else")
+            XCTAssertEqual(store.draft(question, field: "layout"), "")
+            XCTAssertEqual(store.answers(question)["layout"], "Something else")
+        }
+    }
     func session(_ status: String, token: String = "old") -> Session {
         Session(id: "test", title: "Test", project: "/tmp/test", agent: "codex", source: "herdr", status: status, question: status == "waiting" ? "Continue?" : "", options: [], token: token, canReply: status == "waiting", kind: "screen", updated: 1, target: [:], detail: "", fields: [])
     }

@@ -155,7 +155,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         } else if Date().timeIntervalSince(lastDockHover) > 0.8, dockPanel?.isKeyWindow != true { dockPanel?.orderOut(nil) }
     }
     func showPanel(_ id: String) {
-        if let active = panelSession, store.visible.contains(where: { $0.id == active && $0.waiting }) { return }
+        guard !NSApp.isActive || panel?.isVisible == true else { return }
+        if panel?.isVisible == true, let active = panelSession, store.visible.contains(where: { $0.id == active && $0.waiting }) { return }
         guard let s = store.visible.first(where: { $0.id == id }) else { return }
         panelSession = id
         if panel == nil {
@@ -197,7 +198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
         DispatchQueue.main.async {
             if let id = response.notification.request.content.userInfo["session"] as? String {
-                self.store.selected = id
+                if let session = self.store.visible.first(where: { $0.id == id }) { self.store.choose(session) }
                 if response.notification.request.content.userInfo["kind"] as? String == "done", let s = self.store.current { self.store.open(s) }
                 else { self.showWindow() }
             } else { self.showWindow() }

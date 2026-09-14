@@ -28,6 +28,8 @@ struct LocalState: Codable {
     var retired: Set<String> = []
     var uncertain: [String: String]? = [:]
     var deliveryStarted: [String: Double]? = [:]
+    var comments: [String: [String: String]]? = [:]
+    var answeredContext: [String: String]? = [:]
 }
 
 final class Bridge {
@@ -58,7 +60,8 @@ final class Bridge {
 
 final class Store: ObservableObject {
     @Published var local = LocalState()
-    @Published var selected: String?
+    @Published var selected: String? { didSet { if selected != oldValue { advanceAfterReply = [:] } } }
+    @Published var readingRequest = UUID()
     @Published var errors: [String] = []
     @Published var message: String?
     @Published var polling = false
@@ -74,6 +77,8 @@ final class Store: ObservableObject {
     private let notificationsEnabled: Bool
     private var started = false
     private var sent: [String: String] = [:]
+    var advanceAfterReply: [String: String] = [:]
+    private var replyContexts: [String: Session] = [:]
     var visible: [Session] {
         local.sessions.filter { !local.excluded.contains($0.id) && !local.excludedProjects.contains($0.project) && !local.retired.contains($0.id) }
             .sorted { a, b in
@@ -119,14 +124,16 @@ final class Store: ObservableObject {
     }
     func clearQuestionDrafts() throws {
         var clean = local
-        clean.drafts = [:]; clean.uncertain = sent
+        clean.drafts = [:]; clean.comments = [:]; clean.answeredContext = [:]; clean.uncertain = sent
         try persist(clean)
         local = clean
+        replyContexts = [:]
         onChange?()
     }
     func title(_ s: Session) -> String { local.names[s.id] ?? s.title }
     func choose(_ s: Session) {
         selected = s.id
+        readingRequest = UUID()
         markViewed(s)
     }
     func markViewed(_ s: Session) {
@@ -165,6 +172,7 @@ final class Store: ObservableObject {
     func merge(_ incoming: [Session], completeSources: Set<String> = ["herdr", "Terminal", "Claude Code"]) {
         let old = Dictionary(uniqueKeysWithValues: local.sessions.map { ($0.id, $0) })
         var merged: [Session] = []
+        var completedReply: String?
         for var s in incoming {
             let previous = old[s.id]
             if s.kind == "screen" && s.status == "idle" && previous?.status == "working" { s.status = "done" }
@@ -183,9 +191,14 @@ final class Store: ObservableObject {
             // Preserve the guard only while that exact question remains on screen.
             if let token = sent[s.id], s.status != "offline", s.status != "unconfirmed",
                (!s.waiting || s.token != token) {
+                if let answered = replyContexts.removeValue(forKey: s.id) { rememberAnsweredContext(answered) }
+                if advanceAfterReply[s.id] == token && selected == s.id { completedReply = s.id }
+                advanceAfterReply.removeValue(forKey: s.id)
                 sent.removeValue(forKey: s.id); local.drafts.removeValue(forKey: token)
+                local.comments?.removeValue(forKey: token)
                 local.deliveryStarted?.removeValue(forKey: s.id)
             }
+            if s.status == "unconfirmed" { advanceAfterReply.removeValue(forKey: s.id) }
             merged.append(s)
         }
         let ids = Set(incoming.map(\.id))
@@ -194,6 +207,10 @@ final class Store: ObservableObject {
                 local.seen.remove(missing.id); local.retired.remove(missing.id)
                 local.excluded.remove(missing.id); local.names.removeValue(forKey: missing.id)
                 sent.removeValue(forKey: missing.id); local.deliveryStarted?.removeValue(forKey: missing.id)
+                replyContexts.removeValue(forKey: missing.id)
+                advanceAfterReply.removeValue(forKey: missing.id)
+                local.answeredContext?.removeValue(forKey: missing.id)
+                local.comments?.removeValue(forKey: missing.token)
                 local.drafts.removeValue(forKey: missing.token); local.arrival.removeValue(forKey: missing.token)
                 local.dismissed.remove(missing.token); local.snoozes.removeValue(forKey: missing.token)
                 continue
@@ -202,6 +219,10 @@ final class Store: ObservableObject {
             merged.append(missing)
         }
         local.sessions = merged
+        if let completedReply, selected == completedReply {
+            message = "Агент продолжил работу после ответа"
+            nextQuestion()
+        }
         if !visible.contains(where: { $0.id == selected }) { selected = visible.first?.id }
         for s in visible {
             let previous = old[s.id]
@@ -251,14 +272,49 @@ final class Store: ObservableObject {
     }
     func draft(_ s: Session, field: String) -> String { local.drafts[s.token]?[field] ?? "" }
     func setDraft(_ s: Session, field: String, value: String) { local.drafts[s.token, default: [:]][field] = value; save() }
+    func comment(_ s: Session, field: String) -> String { local.comments?[s.token]?[field] ?? "" }
+    func separateLegacyComments(_ s: Session) {
+        var changed = false
+        for field in s.fields where !field.options.isEmpty {
+            let value = draft(s, field: field.id)
+            let choices = field.multi ? value.components(separatedBy: ", ") : [value]
+            guard !value.isEmpty, !choices.allSatisfy({ choice in field.options.contains { $0.label == choice } }) else { continue }
+            if local.comments == nil { local.comments = [:] }
+            local.comments?[s.token, default: [:]][field.id] = [value, comment(s, field: field.id)].filter { !$0.isEmpty }.joined(separator: " — ")
+            local.drafts[s.token]?[field.id] = ""
+            changed = true
+        }
+        if changed { save() }
+    }
+    func setComment(_ s: Session, field: String, value: String) {
+        if local.comments == nil { local.comments = [:] }
+        local.comments?[s.token, default: [:]][field] = value
+        save()
+    }
+    func answers(_ s: Session) -> [String: String] {
+        Dictionary(uniqueKeysWithValues: s.fields.map { field in
+            let selection = draft(s, field: field.id).trimmingCharacters(in: .whitespacesAndNewlines)
+            let addition = comment(s, field: field.id).trimmingCharacters(in: .whitespacesAndNewlines)
+            return (field.id, [selection, addition].filter { !$0.isEmpty }.joined(separator: " — "))
+        })
+    }
+    func rememberAnsweredContext(_ s: Session) {
+        guard s.kind == "screen" else { return }
+        if local.answeredContext == nil { local.answeredContext = [:] }
+        local.answeredContext?[s.id] = s.detail.isEmpty ? s.question : s.detail
+    }
     func reply(_ s: Session, answer: String = "") {
         guard s.canReply, !submitting.contains(s.id), sent[s.id] != s.token else { return }
-        submitting.insert(s.id)
+        let shouldAdvance = selected == s.id
         guard let data = try? JSONEncoder().encode(s), let obj = try? JSONSerialization.jsonObject(with: data) else { return }
-        Bridge.call(["action": "reply", "session": obj, "answer": answer, "answers": local.drafts[s.token] ?? [:]]) { [weak self] result in
+        submitting.insert(s.id)
+        Bridge.call(["action": "reply", "session": obj, "answer": answer, "answers": answers(s)]) { [weak self] result in
             guard let self else { return }; self.submitting.remove(s.id)
             switch result {
             case .success:
+                self.replyContexts[s.id] = s
+                ChatPreferences.shared.markReply(s)
+                if shouldAdvance && self.selected == s.id { self.advanceAfterReply[s.id] = s.token }
                 self.sent[s.id] = s.token
                 if self.local.deliveryStarted == nil { self.local.deliveryStarted = [:] }
                 self.local.deliveryStarted?[s.id] = Date().timeIntervalSince1970
@@ -299,6 +355,9 @@ final class Store: ObservableObject {
         sent.removeValue(forKey: s.id)
         local.deliveryStarted?.removeValue(forKey: s.id)
         local.drafts.removeValue(forKey: s.token)
+        local.comments?.removeValue(forKey: s.token)
+        advanceAfterReply.removeValue(forKey: s.id)
+        replyContexts.removeValue(forKey: s.id)
         if let i = local.sessions.firstIndex(where: { $0.id == s.id }) {
             local.sessions[i].status = "idle"; local.sessions[i].canReply = false
             local.sessions[i].question = ""; local.sessions[i].detail = ""
