@@ -29,6 +29,8 @@ struct ContentView: View {
     @State private var search = ""
     @State private var workspace = "all"
     @State private var manageWorkspaces = false
+    @State private var creatingWorkspace = false
+    @State private var workspaceName = ""
     @State private var filter = SessionFilter.all
     @State private var showFinished = false
     @State private var inspecting = false
@@ -36,8 +38,17 @@ struct ContentView: View {
     @State private var newChat = false
     @AppStorage("setupComplete") private var setupComplete = false
     @FocusState private var searching: Bool
+    var workspaceSessions: [Session] {
+        store.visible.filter { workspace == "all" || (workspace == "ungrouped" ? store.workspaceID($0) == nil : store.workspaceID($0) == workspace) }
+    }
+    var workspaceTitle: String {
+        if workspace == "all" { return "Все пространства" }
+        if workspace == "ungrouped" { return "Без пространства" }
+        return store.workspaces.first { $0.id == workspace }?.name ?? "Все пространства"
+    }
+    var waitingCount: Int { workspaceSessions.filter(\.waiting).count }
     var filtered: [Session] {
-        store.visible.filter { (workspace == "all" || (workspace == "ungrouped" ? store.workspaceID($0) == nil : store.workspaceID($0) == workspace)) && filter.accepts($0) && (search.isEmpty || (store.title($0) + $0.project + $0.agent).localizedCaseInsensitiveContains(search)) }
+        workspaceSessions.filter { filter.accepts($0) && (search.isEmpty || (store.title($0) + $0.project + $0.agent).localizedCaseInsensitiveContains(search)) }
     }
     var body: some View {
         VStack(spacing: 0) {
@@ -98,6 +109,14 @@ struct ContentView: View {
                 }.foregroundStyle(.secondary).padding(12)
             }
         }.background { AmbientBackground() }.tint(Palette.accent)
+            .alert("Новое пространство", isPresented: $creatingWorkspace) {
+                TextField("Название", text: $workspaceName)
+                Button("Создать") {
+                    store.saveWorkspace(name: workspaceName)
+                    if let created = store.workspaces.last { workspace = created.id }
+                }.disabled(workspaceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("Отмена", role: .cancel) {}
+            } message: { Text("Объедините диалоги вокруг одной задачи.") }
             .sheet(isPresented: $manageWorkspaces) { WorkspaceSettings(store: store) }
             .onChange(of: workspace) { _, _ in
                 if !filtered.contains(where: { $0.id == store.selected }) { store.selected = filtered.first?.id }
@@ -113,17 +132,30 @@ struct ContentView: View {
     }
     var sidebar: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack { Text("Диалоги").font(.system(size: 20, weight: .bold)); Spacer(); Text("\(store.visible.count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
-                .padding(.top, 4)
-            HStack {
-                Picker("Пространство", selection: $workspace) {
-                    Text("Все диалоги").tag("all")
-                    Text("Без пространства").tag("ungrouped")
-                    ForEach(store.workspaces) { group in Text(group.name).tag(group.id) }
-                }.labelsHidden().frame(maxWidth: .infinity)
-                Button { manageWorkspaces = true } label: { Image(systemName: "folder.badge.gearshape") }
-                    .help("Управлять рабочими пространствами")
-            }
+            HStack(spacing: 8) {
+                Text("Диалоги").font(.system(size: 18, weight: .bold)).fixedSize()
+                Spacer(minLength: 0)
+                Menu {
+                    Picker("Пространство", selection: $workspace) {
+                        Text("Все пространства").tag("all")
+                        Text("Без пространства").tag("ungrouped")
+                        ForEach(store.workspaces) { group in Text(group.name).tag(group.id) }
+                    }
+                    Divider()
+                    Button("Создать пространство…") { workspaceName = ""; creatingWorkspace = true }
+                    Button("Управлять пространствами…") { manageWorkspaces = true }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(workspaceTitle).lineLimit(1).truncationMode(.tail)
+                        Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                    }.font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Palette.accent).padding(.vertical, 7)
+                        .contentShape(Rectangle())
+                }.menuStyle(.borderlessButton).menuIndicator(.hidden)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .help("Пространство: " + workspaceTitle)
+                    .accessibilityLabel("Выбрать пространство: " + workspaceTitle)
+            }.padding(.top, 4)
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField("Поиск диалога", text: $search).textFieldStyle(.plain).focused($searching)
@@ -134,7 +166,11 @@ struct ContentView: View {
                     Button { filter = item } label: {
                         HStack(spacing: 4) {
                             Text(item.rawValue)
-                            if item == .waiting && !store.pending.isEmpty { Text("\(store.pending.count)").fontWeight(.bold) }
+                            if item == .waiting && waitingCount > 0 {
+                                Text("\(waitingCount)").font(.system(size: 9, weight: .semibold).monospacedDigit())
+                                    .padding(.horizontal, 4).padding(.vertical, 1)
+                                    .background(filter == .waiting ? Color.white.opacity(0.2) : Palette.accent.opacity(0.12), in: Capsule())
+                            }
                         }.font(.system(size: 11, weight: filter == item ? .semibold : .regular))
                             .padding(.vertical, 7).frame(maxWidth: .infinity)
                             .background(filter == item ? Palette.action : .clear, in: RoundedRectangle(cornerRadius: 8))

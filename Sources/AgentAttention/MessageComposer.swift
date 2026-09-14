@@ -14,14 +14,10 @@ struct MessageComposer: View {
         VStack(alignment: .leading, spacing: 6) {
         HStack(alignment: .bottom, spacing: 10) {
             Button {
-                let panel = NSOpenPanel()
-                panel.canChooseDirectories = false
-                panel.allowsMultipleSelection = true
-                panel.prompt = "Прикрепить"
-                panel.message = "Агент получит пути к локальным файлам. Файлы должны оставаться доступны по этим путям."
-                guard panel.runModal() == .OK else { return }
-                do { text = try AttachmentReference.adding(panel.urls, to: text); attachmentError = nil }
-                catch { attachmentError = error.localizedDescription }
+                AttachmentPicker.present(from: inputAnchor.window) { urls in
+                    do { text = try AttachmentReference.adding(urls, to: text); attachmentError = nil }
+                    catch { attachmentError = error.localizedDescription }
+                }
             } label: { Image(systemName: "paperclip") }
                 .buttonStyle(.plain).disabled(sending)
                 .accessibilityLabel("Прикрепить файл или скриншот")
@@ -64,4 +60,22 @@ private struct ComposerInputAnchor: NSViewRepresentable {
     let view: NSView
     func makeNSView(context: Context) -> NSView { view }
     func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+enum AttachmentPicker {
+    static func present(from window: NSWindow?, completion: @escaping ([URL]) -> Void) {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.prompt = "Прикрепить"
+        panel.message = "Агент получит пути к локальным файлам. Файлы должны оставаться доступны по этим путям."
+        let finish: (NSApplication.ModalResponse) -> Void = { response in
+            if response == .OK { completion(panel.urls) }
+        }
+        if let window {
+            panel.beginSheetModal(for: window, completionHandler: finish)
+        } else {
+            panel.begin(completionHandler: finish)
+        }
+    }
 }
