@@ -154,18 +154,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             }
         } else if Date().timeIntervalSince(lastDockHover) > 0.8, dockPanel?.isKeyWindow != true { dockPanel?.orderOut(nil) }
     }
-    func showPanel(_ id: String) {
-        guard !NSApp.isActive || panel?.isVisible == true else { return }
-        if panel?.isVisible == true, let active = panelSession, store.visible.contains(where: { $0.id == active && $0.waiting }) { return }
+    func showPanel(_ id: String, switching: Bool = false) {
+        guard switching || !NSApp.isActive || panel?.isVisible == true else { return }
+        if !switching, panel?.isVisible == true, let active = panelSession, store.visible.contains(where: { $0.id == active && $0.waiting }) { return }
         guard let s = store.visible.first(where: { $0.id == id }) else { return }
         panelSession = id
         if panel == nil {
             panel = QuestionPanel(contentRect: NSRect(x: 0, y: 0, width: 440, height: 550), styleMask: [.titled, .nonactivatingPanel, .resizable, .closable, .miniaturizable], backing: .buffered, defer: false)
-            panel?.title = "Нужен ваш ответ"; panel?.level = .floating; panel?.hidesOnDeactivate = false
+            panel?.title = "Pingvi"; panel?.level = .floating; panel?.hidesOnDeactivate = false
             panel?.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]; panel?.isReleasedWhenClosed = false
         }
-        panel?.contentView = NSHostingView(rootView: FloatingQuestion(store: store, id: s.id))
-        if let screen = NSScreen.main { let f = screen.visibleFrame; panel?.setFrameOrigin(NSPoint(x: f.maxX - 464, y: f.maxY - 590)) }
+        panel?.contentView = NSHostingView(rootView: FloatingQuestion(store: store, id: s.id, selectQuestion: { [weak self] id in self?.showPanel(id, switching: true) }))
+        if !switching, let screen = NSScreen.main { let f = screen.visibleFrame; panel?.setFrameOrigin(NSPoint(x: f.maxX - 464, y: f.maxY - 590)) }
         panel?.orderFrontRegardless()
     }
     func refresh() {
@@ -216,15 +216,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 struct FloatingQuestion: View {
     @ObservedObject var store: Store
     let id: String
+    var selectQuestion: ((String) -> Void)? = nil
     var body: some View {
-        VStack {
-            HStack { Text("Ожидают ответа: \(store.pending.count)").font(.caption).foregroundStyle(.secondary); Spacer(); Menu("Очередь") { ForEach(store.pending) { s in Button(store.title(s)) { store.selected = s.id; NSApp.activate(ignoringOtherApps: true); NSApp.windows.first(where: { $0.title == "Pingvi" })?.makeKeyAndOrderFront(nil) } } } }.padding(.bottom, 8)
-            if let s = store.visible.first(where: { $0.id == id }) { QuestionView(store: store, session: s) }
-        }.padding(20).frame(minWidth: 380, minHeight: 450).background { AmbientBackground() }.tint(Palette.accent)
+        VStack(spacing: 0) {
+            if let s = store.visible.first(where: { $0.id == id }) {
+                QuestionView(store: store, session: s, compact: true, selectQuestion: selectQuestion)
+                    .id(s.id)
+            }
+        }.padding(16).frame(minWidth: 380, minHeight: 450).background { AmbientBackground() }.tint(Palette.accent)
     }
 }
+
 if let index = CommandLine.arguments.firstIndex(of: "--preview-floating"), CommandLine.arguments.count > index + 1 {
-    do { try ReleasePreview.captureDashboard(to: URL(fileURLWithPath: CommandLine.arguments[index + 1]), floating: true, dark: CommandLine.arguments.contains("--preview-dark")); exit(0) }
+    do { try ReleasePreview.captureDashboard(to: URL(fileURLWithPath: CommandLine.arguments[index + 1]), floating: true, dark: CommandLine.arguments.contains("--preview-dark"), approval: CommandLine.arguments.contains("--preview-approval")); exit(0) }
     catch { FileHandle.standardError.write(Data(error.localizedDescription.utf8)); exit(1) }
 }
 if let index = CommandLine.arguments.firstIndex(of: "--preview-dashboard"), CommandLine.arguments.count > index + 1 {

@@ -56,7 +56,7 @@ struct FloatingPreviewScene: View {
             .offset(x: 38, y: 70)
 
             VStack(spacing: 0) {
-                titlebar("Нужен ваш ответ")
+                titlebar("Pingvi")
                 FloatingQuestion(store: store, id: id).frame(width: 440, height: 550)
             }
             .frame(width: 440)

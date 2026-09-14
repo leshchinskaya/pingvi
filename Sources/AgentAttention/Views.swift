@@ -193,26 +193,64 @@ struct ContentView: View {
 struct QuestionView: View {
     @ObservedObject var store: Store
     var session: Session
+    var compact = false
+    var selectQuestion: ((String) -> Void)? = nil
     @State private var details = false
     @State private var renaming = false
     @State private var newName = ""
+    private var projectLabel: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "folder")
+            Text(session.project.isEmpty ? session.source : URL(fileURLWithPath: session.project).lastPathComponent).lineLimit(1)
+            Text("· " + session.agent.capitalized).lineLimit(1)
+        }.font(.caption).foregroundStyle(.secondary).help(session.project).textSelection(.enabled)
+    }
+    private var queueItems: some View {
+        ForEach(store.pending) { item in
+            Button(store.title(item)) { selectQuestion?(item.id) }
+        }
+    }
     func selected(_ option: FieldOption, in field: QuestionField) -> Bool {
         let draft = store.draft(session, field: field.id)
         return field.multi ? draft.components(separatedBy: ", ").contains(option.label) : draft == option.label
     }
     var body: some View {
-        VStack(alignment: .leading, spacing: 15) {
-            HStack {
-                Label(session.statusLabel, systemImage: session.waiting ? "hand.raised.fill" : "circle.fill").font(.caption.weight(.semibold)).foregroundStyle(stateColor(session.status)).padding(.horizontal, 10).padding(.vertical, 6).background(stateColor(session.status).opacity(0.08), in: Capsule())
-                Spacer()
-                Menu { Button("Переименовать") { newName = store.title(session); renaming = true }; Button("Исключить") { store.exclude(session) } } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).frame(width: 22)
+        VStack(alignment: .leading, spacing: compact ? 10 : 15) {
+            if compact {
+                HStack(alignment: .top, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(store.title(session)).font(.system(size: 18, weight: .semibold))
+                            .lineLimit(1).help(store.title(session)).textSelection(.enabled)
+                        projectLabel
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: session.waiting ? "hand.raised.fill" : "circle.fill")
+                        .font(.caption).foregroundStyle(stateColor(session.status))
+                        .help(session.statusLabel).accessibilityLabel(session.statusLabel)
+                        .padding(.top, 4)
+                    if store.pending.count > 1 {
+                        Menu {
+                            queueItems
+                        } label: {
+                            Text("\((store.pending.firstIndex { $0.id == session.id } ?? 0) + 1) из \(store.pending.count)")
+                                .font(.caption)
+                        }.menuStyle(.borderlessButton).fixedSize().help("Очередь вопросов")
+                    }
+                    Menu {
+                        if store.pending.count <= 1 { Menu("Очередь") { queueItems } }
+                        Button("Переименовать") { newName = store.title(session); renaming = true }
+                        Button("Исключить") { store.exclude(session) }
+                    } label: { Image(systemName: "ellipsis") }
+                        .menuStyle(.borderlessButton).frame(width: 22)
+                }.fixedSize(horizontal: false, vertical: true)
+            } else {
+                HStack {
+                    Label(session.statusLabel, systemImage: session.waiting ? "hand.raised.fill" : "circle.fill").font(.caption.weight(.semibold)).foregroundStyle(stateColor(session.status)).padding(.horizontal, 10).padding(.vertical, 6).background(stateColor(session.status).opacity(0.08), in: Capsule())
+                    Spacer()
+                    Menu { Button("Переименовать") { newName = store.title(session); renaming = true }; Button("Исключить") { store.exclude(session) } } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).frame(width: 22)
+                }
+                Text(store.title(session)).font(.system(size: 23, weight: .semibold)).textSelection(.enabled)
+                projectLabel
             }
-            Text(store.title(session)).font(.system(size: 23, weight: .semibold)).textSelection(.enabled)
-            HStack(spacing: 6) {
-                Image(systemName: "folder")
-                Text(session.project.isEmpty ? session.source : URL(fileURLWithPath: session.project).lastPathComponent).lineLimit(1)
-                Text("· " + session.agent.capitalized).lineLimit(1)
-            }.font(.caption).foregroundStyle(.secondary).help(session.project).textSelection(.enabled)
             if renaming {
                 HStack { TextField("Название", text: $newName); Button("Сохранить") { store.local.names[session.id] = newName; store.save(); renaming = false } }
             }
@@ -285,17 +323,19 @@ struct QuestionView: View {
             if session.status == "checking" { Label("Ответ отправлен. Проверяем состояние агента…", systemImage: "arrow.triangle.2.circlepath").font(.caption).foregroundStyle(Palette.accent) }
             if !session.options.isEmpty {
                 VStack(spacing: 7) { ForEach(session.options) { option in
-                    Button { store.reply(session, answer: option.id) } label: { Text(option.label).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 3) }.buttonStyle(.bordered).disabled(!session.canReply || store.submitting.contains(session.id))
-                } }
+                    Button { store.reply(session, answer: option.id) } label: { Text(option.label).multilineTextAlignment(.leading).lineLimit(nil).fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 3) }.buttonStyle(.bordered).disabled(!session.canReply || store.submitting.contains(session.id))
+                } }.fixedSize(horizontal: false, vertical: true)
             }
             HStack {
-                Button { store.open(session) } label: { Label("Открыть сессию", systemImage: "arrow.up.forward.app").foregroundStyle(Palette.accent) }.buttonStyle(.plain)
+                Button { store.open(session) } label: { Label(compact ? "В сессию" : "Открыть сессию", systemImage: "arrow.up.forward.app").foregroundStyle(compact ? Color.secondary : Palette.accent) }.buttonStyle(.plain)
                 Spacer()
                 if session.waiting {
                     Menu { ForEach([5, 15, 30, 60], id: \.self) { minutes in Button("Через \(minutes) мин") { store.snooze(session, minutes: Double(minutes)) } } } label: { Label("Позже", systemImage: "clock") }.menuStyle(.borderlessButton).fixedSize().help("Напомнить об этом вопросе позже")
                     Button("Скрыть") { store.dismiss(session) }.help("Убрать карточку, сохранив вопрос в очереди")
                 }
-            }.controlSize(.regular).padding(.top, 6)
+            }.controlSize(compact ? .small : .regular).font(compact ? .caption : .body)
+                .foregroundStyle(compact ? Color.secondary : Color.primary)
+                .padding(.top, compact ? 0 : 6).fixedSize(horizontal: false, vertical: true)
         }.onAppear { store.separateLegacyComments(session) }
             .onChange(of: session.token) { _, _ in store.separateLegacyComments(session) }
     }

@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Render the actual data controls with fixture counts, without polling user sessions.
 enum ReleasePreview {
-    static func captureDashboard(to destination: URL, floating: Bool = false, dark: Bool = false) throws {
+    static func captureDashboard(to destination: URL, floating: Bool = false, dark: Bool = false, approval: Bool = false) throws {
         let app = NSApplication.shared
         app.setActivationPolicy(.prohibited)
         app.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
@@ -22,6 +22,17 @@ enum ReleasePreview {
             FieldOption(label: "Карточки", description: "Больше воздуха и акцент на главных событиях"),
             FieldOption(label: "Компактный список", description: "Больше событий на одном экране")
         ], multi: false)]
+        if approval {
+            question.title = "Гости"; question.project = "up-sushi-ba"; question.agent = "Codex"
+            question.kind = "screen"; question.fields = []
+            question.question = "• Edited reports/GUESTS_MERGE_SETTLEMENT_2026-09-14.md (+1 -1)\n" +
+                Array(repeating: "  20\n  21 − `services/guest_merge_tracking.py`:\n    `c90a7aece4ed7d8a6ea077a3a3`\n  21 + `services/guest_merge_tracking.py`:\n    `cc481d52028b5987d6624fb2f0`", count: 4).joined(separator: "\n")
+            question.options = [
+                Choice(id: "y", label: "Yes, proceed (y)"),
+                Choice(id: "a", label: "Yes, and don't ask again for commands that start with `git add reports/GUESTS_MERGE_SETTLEMENT_2026-09-14.md` (a)"),
+                Choice(id: "esc", label: "No, and tell Codex what to do differently (esc)")
+            ]
+        }
         store.local.sessions = [question,
             session("demo-tests", "Проверка оформления заказа", "Paper Plane", "Codex", "working"),
             session("demo-api", "Документация API", "Atlas", "Claude Code", "working"),
