@@ -39,8 +39,8 @@ python3 tools/check_chat_transport.py
 ## Иллюстрации README
 
 ```sh
-dist/Pingvi.app/Contents/MacOS/AgentAttention --preview-dashboard docs/media/dashboard.png
-dist/Pingvi.app/Contents/MacOS/AgentAttention --preview-floating docs/media/floating-question.png
+dist/Pingvi.app/Contents/MacOS/AgentAttention --preview-dashboard docs/media/dashboard-2026-09.png
+dist/Pingvi.app/Contents/MacOS/AgentAttention --preview-floating docs/media/floating-question-2026-09.png
 ```
 
 Для тёмного варианта добавьте `--preview-dark` к `--preview-dashboard` или `--preview-floating`.
@@ -48,7 +48,7 @@ dist/Pingvi.app/Contents/MacOS/AgentAttention --preview-floating docs/media/floa
 
 Экспортирует настоящий интерфейс с вымышленными проектами без опроса пользовательских сессий. Не используйте рабочие диалоги в публичных скриншотах.
 
-`--preview-floating` показывает настоящий компонент плавающей карточки на нарисованном демонстрационном фоне редактора. Рабочий стол и окна пользователя не захватываются. После изменения кода сначала пересоберите приложение; для быстрого экспорта также можно использовать `swift run AgentAttention --preview-floating docs/media/floating-question.png`.
+`--preview-floating` показывает настоящий компонент плавающей карточки на нарисованном демонстрационном фоне редактора. Рабочий стол и окна пользователя не захватываются. После изменения кода сначала пересоберите приложение; для быстрого экспорта также можно использовать `swift run AgentAttention --preview-floating docs/media/floating-question-2026-09.png`.
 
 ## Подпись и распространение
 
