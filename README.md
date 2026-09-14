@@ -80,7 +80,7 @@ Pingvi показывает, какой агент ждёт вашего отв�
 
 ## Установка
 
-**[Скачать Pingvi 0.7.0 beta 3 — DMG для Apple Silicon](https://github.com/leshchinskaya/pingvi/releases/download/v0.7.0-beta.3/Pingvi-0.7.0-beta.3-arm64.dmg)**
+**[Скачать Pingvi 0.7.0 beta 4 — DMG для Apple Silicon](https://github.com/leshchinskaya/pingvi/releases/download/v0.7.0-beta.4/Pingvi-0.7.0-beta.4-arm64.dmg)**
 
 [Все версии и контрольные суммы SHA-256 — в GitHub Releases](https://github.com/leshchinskaya/pingvi/releases).
 
