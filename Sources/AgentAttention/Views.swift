@@ -27,6 +27,8 @@ struct ContentView: View {
     var onClose: (() -> Void)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var search = ""
+    @State private var workspace = "all"
+    @State private var manageWorkspaces = false
     @State private var filter = SessionFilter.all
     @State private var showFinished = false
     @State private var inspecting = false
@@ -35,7 +37,7 @@ struct ContentView: View {
     @AppStorage("setupComplete") private var setupComplete = false
     @FocusState private var searching: Bool
     var filtered: [Session] {
-        store.visible.filter { filter.accepts($0) && (search.isEmpty || (store.title($0) + $0.project + $0.agent).localizedCaseInsensitiveContains(search)) }
+        store.visible.filter { (workspace == "all" || (workspace == "ungrouped" ? store.workspaceID($0) == nil : store.workspaceID($0) == workspace)) && filter.accepts($0) && (search.isEmpty || (store.title($0) + $0.project + $0.agent).localizedCaseInsensitiveContains(search)) }
     }
     var body: some View {
         VStack(spacing: 0) {
@@ -96,6 +98,16 @@ struct ContentView: View {
                 }.foregroundStyle(.secondary).padding(12)
             }
         }.background { AmbientBackground() }.tint(Palette.accent)
+            .sheet(isPresented: $manageWorkspaces) { WorkspaceSettings(store: store) }
+            .onChange(of: workspace) { _, _ in
+                if !filtered.contains(where: { $0.id == store.selected }) { store.selected = filtered.first?.id }
+            }
+            .onChange(of: store.local.workspaceAssignments) { _, _ in
+                if !filtered.contains(where: { $0.id == store.selected }) { store.selected = filtered.first?.id }
+            }
+            .onChange(of: store.workspaces) { _, groups in
+                if workspace != "all" && workspace != "ungrouped" && !groups.contains(where: { $0.id == workspace }) { workspace = "all" }
+            }
             .sheet(isPresented: $newChat) { NewChatView(store: store) }
             .onChange(of: chatEnabled) { _, enabled in if !enabled { newChat = false } }
     }
@@ -103,6 +115,15 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack { Text("Диалоги").font(.system(size: 20, weight: .bold)); Spacer(); Text("\(store.visible.count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
                 .padding(.top, 4)
+            HStack {
+                Picker("Пространство", selection: $workspace) {
+                    Text("Все диалоги").tag("all")
+                    Text("Без пространства").tag("ungrouped")
+                    ForEach(store.workspaces) { group in Text(group.name).tag(group.id) }
+                }.labelsHidden().frame(maxWidth: .infinity)
+                Button { manageWorkspaces = true } label: { Image(systemName: "folder.badge.gearshape") }
+                    .help("Управлять рабочими пространствами")
+            }
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField("Поиск диалога", text: $search).textFieldStyle(.plain).focused($searching)
@@ -167,6 +188,9 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(store.title(s)).font(.system(size: 13, weight: .semibold)).lineLimit(2)
                     Text(s.agent.capitalized + " · " + (s.project.isEmpty ? s.source : URL(fileURLWithPath: s.project).lastPathComponent)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                    if let group = store.workspaces.first(where: { $0.id == store.workspaceID(s) }) {
+                        Label(group.name, systemImage: "folder").font(.caption2).foregroundStyle(Palette.accent)
+                    }
                     if s.waiting && !s.question.isEmpty { Text(s.question).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(2) }
                     HStack(spacing: 4) {
                         Text(s.statusLabel).lineLimit(1)
@@ -182,6 +206,14 @@ struct ContentView: View {
                 .background(store.selected == s.id ? Palette.selection : .clear, in: RoundedRectangle(cornerRadius: 10))
                 .overlay(alignment: .leading) { if store.selected == s.id { Capsule().fill(Palette.accent).frame(width: 3, height: 28) } }
         }.buttonStyle(.plain).contextMenu {
+            Menu("Рабочее пространство") {
+                Button("Без пространства") { store.assign(s, to: nil) }
+                ForEach(store.workspaces) { group in
+                    Button(group.name) { store.assign(s, to: group.id) }
+                }
+                Divider()
+                Button("Управлять пространствами…") { manageWorkspaces = true }
+            }
             Button("Открыть сессию") { store.open(s) }
             Button("Исключить сессию") { store.exclude(s) }
             if !s.project.isEmpty { Button("Исключить проект") { store.exclude(s, project: true) } }

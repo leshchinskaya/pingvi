@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MessageComposer: View {
     @State private var inputAnchor = NSView()
+    @State private var attachmentError: String?
     var placeholder: String
     @Binding var text: String
     var canSend: Bool
@@ -10,7 +11,21 @@ struct MessageComposer: View {
     var send: () -> Void
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
         HStack(alignment: .bottom, spacing: 10) {
+            Button {
+                let panel = NSOpenPanel()
+                panel.canChooseDirectories = false
+                panel.allowsMultipleSelection = true
+                panel.prompt = "Прикрепить"
+                panel.message = "Агент получит пути к локальным файлам. Файлы должны оставаться доступны по этим путям."
+                guard panel.runModal() == .OK else { return }
+                do { text = try AttachmentReference.adding(panel.urls, to: text); attachmentError = nil }
+                catch { attachmentError = error.localizedDescription }
+            } label: { Image(systemName: "paperclip") }
+                .buttonStyle(.plain).disabled(sending)
+                .accessibilityLabel("Прикрепить файл или скриншот")
+                .help("Прикрепить локальный файл или скриншот")
             TextField(placeholder, text: $text, axis: .vertical)
                 .textFieldStyle(.plain).lineLimit(2...7)
                 .onKeyPress(.return, phases: .down) { key in
@@ -35,6 +50,12 @@ struct MessageComposer: View {
                 .accessibilityLabel(sending ? "Отправляем сообщение" : "Отправить сообщение")
                 .help("Отправить · Enter. Новая строка · Shift+Enter")
             }
+        }
+        if text.contains(AttachmentReference.prefix) {
+            Text("Файлы передаются агенту по локальным путям. Удалите строку, чтобы убрать вложение.")
+                .font(.caption2).foregroundStyle(.secondary)
+        }
+        if let attachmentError { Text(attachmentError).font(.caption).foregroundStyle(.red) }
         }.background(ComposerInputAnchor(view: inputAnchor).frame(width: 0, height: 0))
     }
 }

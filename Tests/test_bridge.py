@@ -21,6 +21,26 @@ APPROVAL = '''Would you like to run the following command?
   Press enter to confirm or esc to cancel'''
 
 class ParserTests(unittest.TestCase):
+    def test_queued_followup_keeps_result_before_question_notice(self):
+        result = ('Добавлены обе возможности:\n\n'
+                  '  - Вложения: скрепка в ответах и чате.\n'
+                  '  - Рабочие пространства: группировка диалогов.\n\n'
+                  '  90 тестов прошли. Собрано приложение: dist/Pingvi.app.')
+        notice = '• Queued follow-up inputs\n  ? 1 question\n    shift + ← to answer'
+        screen = ('• Предыдущий вопрос?\n› делаем\n\n• ' + result + '\n\n' + notice
+                  + '\n\n› Ask Codex to do anything\n  gpt-6 medium · ~')
+        parsed = bridge.parse_screen(screen, 'codex')
+        self.assertIn(result, parsed['question'])
+        self.assertIn('shift + ← to answer', parsed['question'])
+        self.assertNotIn('Предыдущий вопрос?', parsed['question'])
+
+    def test_queued_notice_does_not_change_normal_turn_boundaries(self):
+        notice = '• Queued follow-up inputs\n  ? 1 question\n    shift + ← to answer'
+        self.assertEqual(bridge.latest_assistant_text(notice), notice)
+        self.assertEqual(bridge.latest_assistant_text('• Готово.\n' + notice + '\n• Новый вопрос?'), 'Новый вопрос?')
+        self.assertEqual(bridge.latest_assistant_text('• Старое.\n• Queued follow-up inputs are documented here.'),
+                         'Queued follow-up inputs are documented here.')
+
     def test_current_question_excludes_previous_exchange_and_composer(self):
         question = 'Сохраним выбранную компоновку.\nКак назвать экран?'
         screen = ('• Какую компоновку выбрать?\n\n› Карточки\n\n• ' + question

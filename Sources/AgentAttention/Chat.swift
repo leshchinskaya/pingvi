@@ -93,6 +93,8 @@ final class ChatModel: ObservableObject {
         let preferences = ChatPreferences.shared
         let text = preferences.draft(session).trimmingCharacters(in: .whitespacesAndNewlines)
         guard UserDefaults.standard.bool(forKey: "chatEnabled"), history?.canSend == true, !sending, !text.isEmpty else { return }
+        do { try AttachmentReference.validate(in: text) }
+        catch { self.error = error.localizedDescription; return }
         sending = true
         Bridge.call(["action": "chat-send", "session": Self.payload(session), "text": text, "token": history!.token, "requestID": UUID().uuidString]) { [weak self] result in
             guard let self else { return }; self.sending = false

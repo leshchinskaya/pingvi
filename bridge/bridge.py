@@ -98,7 +98,10 @@ def digest(text):
 
 def latest_assistant_text(text):
     """Separate a terminal turn using CLI message markers, not question marks."""
-    starts = list(re.finditer(r'(?m)^\s*[•●] ', text))
+    # Codex renders its queued-input notice with the same bullet as assistant
+    # messages. It belongs to the preceding result, not to a new assistant turn.
+    starts = [match for match in re.finditer(r'(?m)^\s*[•●] ', text)
+              if not re.match(r'Queued follow-up inputs[ \t]*(?:\n|$)', text[match.end():])]
     return text[starts[-1].end():].strip() if starts else text.strip()
 
 def parse_screen(text, agent):

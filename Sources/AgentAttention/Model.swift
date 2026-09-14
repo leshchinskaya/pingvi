@@ -21,7 +21,14 @@ struct Session: Codable, Identifiable {
     }
 }
 struct Snapshot: Decodable { var sessions: [Session]; var errors: [String]; var completeSources: Set<String>? }
+struct Workspace: Codable, Identifiable, Equatable {
+    var id = UUID().uuidString
+    var name: String
+}
+
 struct LocalState: Codable {
+    var workspaces: [Workspace]? = []
+    var workspaceAssignments: [String: String]? = [:]
     var sessions: [Session] = []; var names: [String: String] = [:]; var drafts: [String: [String: String]] = [:]
     var excluded: Set<String> = []; var excludedProjects: Set<String> = []; var seen: Set<String> = []
     var dismissed: Set<String> = []; var snoozes: [String: Double] = [:]; var arrival: [String: Double] = [:]
@@ -130,6 +137,30 @@ final class Store: ObservableObject {
         replyContexts = [:]
         onChange?()
     }
+    var workspaces: [Workspace] { local.workspaces ?? [] }
+    func workspaceID(_ session: Session) -> String? { local.workspaceAssignments?[session.id] }
+    func saveWorkspace(id: String? = nil, name: String) {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        if let id, let index = local.workspaces?.firstIndex(where: { $0.id == id }) {
+            local.workspaces?[index].name = name
+        } else {
+            if local.workspaces == nil { local.workspaces = [] }
+            local.workspaces?.append(Workspace(name: name))
+        }
+        save()
+    }
+    func assign(_ session: Session, to workspace: String?) {
+        guard workspace == nil || workspaces.contains(where: { $0.id == workspace }) else { return }
+        if local.workspaceAssignments == nil { local.workspaceAssignments = [:] }
+        local.workspaceAssignments?[session.id] = workspace
+        save()
+    }
+    func deleteWorkspace(_ id: String) {
+        local.workspaces?.removeAll { $0.id == id }
+        local.workspaceAssignments = local.workspaceAssignments?.filter { $0.value != id }
+        save()
+    }
     func title(_ s: Session) -> String { local.names[s.id] ?? s.title }
     func choose(_ s: Session) {
         selected = s.id
@@ -205,6 +236,7 @@ final class Store: ObservableObject {
         for var missing in local.sessions where !ids.contains(missing.id) {
             if completeSources.contains(missing.source) {
                 local.seen.remove(missing.id); local.retired.remove(missing.id)
+                local.workspaceAssignments?.removeValue(forKey: missing.id)
                 local.excluded.remove(missing.id); local.names.removeValue(forKey: missing.id)
                 sent.removeValue(forKey: missing.id); local.deliveryStarted?.removeValue(forKey: missing.id)
                 replyContexts.removeValue(forKey: missing.id)
@@ -305,6 +337,10 @@ final class Store: ObservableObject {
     }
     func reply(_ s: Session, answer: String = "") {
         guard s.canReply, !submitting.contains(s.id), sent[s.id] != s.token else { return }
+        do {
+            try AttachmentReference.validate(in: answer)
+            for value in answers(s).values { try AttachmentReference.validate(in: value) }
+        } catch { message = error.localizedDescription; return }
         let shouldAdvance = selected == s.id
         guard let data = try? JSONEncoder().encode(s), let obj = try? JSONSerialization.jsonObject(with: data) else { return }
         submitting.insert(s.id)
