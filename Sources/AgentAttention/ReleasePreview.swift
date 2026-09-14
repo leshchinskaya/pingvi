@@ -3,12 +3,13 @@ import SwiftUI
 
 /// Render the actual data controls with fixture counts, without polling user sessions.
 enum ReleasePreview {
-    static func captureDashboard(to destination: URL) throws {
+    static func captureDashboard(to destination: URL, floating: Bool = false) throws {
         let app = NSApplication.shared
         app.setActivationPolicy(.prohibited)
         app.appearance = NSAppearance(named: .aqua)
         UserDefaults.standard.setVolatileDomain(["chatEnabled": false, "setupComplete": true], forName: UserDefaults.argumentDomain)
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
         let store = Store(storageDirectory: directory, notificationsEnabled: false)
         let now = Date().timeIntervalSince1970
         func session(_ id: String, _ title: String, _ project: String, _ agent: String, _ status: String) -> Session {
@@ -27,9 +28,13 @@ enum ReleasePreview {
             session("demo-theme", "Тёмная тема", "Aurora", "Codex", "done")]
         store.local.drafts = [question.token: ["layout": "Карточки"]]
         store.selected = question.id
-        let view = NSHostingView(rootView: ContentView(store: store).frame(width: 1020, height: 680))
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1020, height: 680), styleMask: [.titled], backing: .buffered, defer: false)
-        window.contentView = view; view.frame = NSRect(x: 0, y: 0, width: 1020, height: 680)
+        let size = NSSize(width: floating ? 1120 : 1020, height: floating ? 760 : 680)
+        let content = floating
+            ? AnyView(FloatingPreviewScene(store: store, id: question.id))
+            : AnyView(ContentView(store: store))
+        let view = NSHostingView(rootView: content.frame(width: size.width, height: size.height))
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = view; view.frame = NSRect(origin: .zero, size: size)
         RunLoop.current.run(until: Date().addingTimeInterval(0.3))
         view.layoutSubtreeIfNeeded()
         guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { throw NSError(domain: "Preview", code: 1) }
