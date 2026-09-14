@@ -11,7 +11,7 @@ Pingvi показывает, какой агент ждёт вашего отв�
 ![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-arm64-335cff?style=flat-square)
 ![Status: Beta](https://img.shields.io/badge/status-beta-9d7bff?style=flat-square)
 
-[Возможности](#возможности) · [Подключения](#подключения) · [Установка](#установка) · [Скачать DMG](https://github.com/leshchinskaya/pingvi/releases) · [Разработка](docs/DEVELOPMENT.md) · [Сообщить об ошибке](https://github.com/leshchinskaya/pingvi/issues)
+[Возможности](#возможности) · [Подключения](#подключения) · [Установка](#установка) · [Скачать DMG](https://github.com/leshchinskaya/pingvi/releases) · [Разработка](docs/DEVELOPMENT.md)
 
 </div>
 
