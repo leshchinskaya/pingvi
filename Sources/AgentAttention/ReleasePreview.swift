@@ -3,10 +3,10 @@ import SwiftUI
 
 /// Render the actual data controls with fixture counts, without polling user sessions.
 enum ReleasePreview {
-    static func captureDashboard(to destination: URL, floating: Bool = false) throws {
+    static func captureDashboard(to destination: URL, floating: Bool = false, dark: Bool = false) throws {
         let app = NSApplication.shared
         app.setActivationPolicy(.prohibited)
-        app.appearance = NSAppearance(named: .aqua)
+        app.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         UserDefaults.standard.setVolatileDomain(["chatEnabled": false, "setupComplete": true], forName: UserDefaults.argumentDomain)
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

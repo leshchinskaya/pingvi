@@ -1,5 +1,28 @@
 import SwiftUI
 
+/// Opaque, appearance-aware colors keep the icy surfaces legible without transparency.
+enum Palette {
+    private static func adaptive(light: UInt32, dark: UInt32) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let rgb = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+            return NSColor(srgbRed: CGFloat((rgb >> 16) & 0xff) / 255,
+                           green: CGFloat((rgb >> 8) & 0xff) / 255,
+                           blue: CGFloat(rgb & 0xff) / 255, alpha: 1)
+        })
+    }
+
+    static let accent = adaptive(light: 0x0066D6, dark: 0x73B9FF)
+    // Filled controls retain white-label contrast in both appearances.
+    static let action = adaptive(light: 0x0066D6, dark: 0x0868CE)
+    static let navy = adaptive(light: 0x143454, dark: 0xD9ECFF)
+    static let canvas = adaptive(light: 0xF2F8FF, dark: 0x101D2D)
+    static let sidebar = adaptive(light: 0xDCECFC, dark: 0x172D45)
+    static let surface = adaptive(light: 0xFAFDFF, dark: 0x1C3046)
+    static let input = adaptive(light: 0xCDE3F8, dark: 0x233C56)
+    static let selection = adaptive(light: 0xBBDDFD, dark: 0x244D76)
+    static let border = adaptive(light: 0xBCD4EB, dark: 0x3A5672)
+}
+
 enum AppTheme: String, CaseIterable, Identifiable {
     case system, light, dark
     var id: String { rawValue }
@@ -24,11 +47,8 @@ enum AppTheme: String, CaseIterable, Identifiable {
 
 /// Shared materials for the dashboard, menu panel and question window.
 struct AmbientBackground: View {
-    @Environment(\.colorScheme) private var scheme
     var body: some View {
-        LinearGradient(colors: scheme == .dark
-                       ? [Color(red: 0.08, green: 0.12, blue: 0.20), Color(red: 0.06, green: 0.08, blue: 0.13)]
-                       : [Color(red: 0.95, green: 0.97, blue: 1), Color(red: 0.97, green: 0.98, blue: 1)],
+        LinearGradient(colors: [Palette.sidebar, Palette.canvas, Palette.surface],
                        startPoint: .topLeading, endPoint: .bottomTrailing)
             .ignoresSafeArea().accessibilityHidden(true)
     }
@@ -53,11 +73,10 @@ private struct NavigationGlass: ViewModifier {
 struct Surface: ViewModifier {
     var radius: CGFloat = 22
     var selected = false
-    @Environment(\.colorScheme) private var scheme
     @Environment(\.colorSchemeContrast) private var contrast
     func body(content: Content) -> some View {
-        content.background(selected ? Palette.accent.opacity(scheme == .dark ? 0.25 : 0.11) : Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: radius))
-            .overlay(RoundedRectangle(cornerRadius: radius).strokeBorder(selected ? Palette.accent.opacity(0.55) : Color.primary.opacity(contrast == .increased ? 0.3 : 0.045), lineWidth: selected ? 1.5 : 1))
+        content.background(selected ? Palette.selection : Palette.surface, in: RoundedRectangle(cornerRadius: radius))
+            .overlay(RoundedRectangle(cornerRadius: radius).strokeBorder(contrast == .increased ? Color.primary.opacity(0.6) : (selected ? Palette.accent.opacity(0.65) : Palette.border), lineWidth: selected ? 1.5 : 1))
     }
 }
 
@@ -66,9 +85,9 @@ extension View {
     func surface(radius: CGFloat = 22, selected: Bool = false) -> some View { modifier(Surface(radius: radius, selected: selected)) }
     @ViewBuilder func actionStyle(prominent: Bool = false) -> some View {
         if #available(macOS 26.0, *) {
-            if prominent { buttonStyle(.glassProminent) } else { buttonStyle(.glass) }
+            if prominent { buttonStyle(.glassProminent).tint(Palette.action) } else { buttonStyle(.glass) }
         } else {
-            if prominent { buttonStyle(.borderedProminent) } else { buttonStyle(.bordered) }
+            if prominent { buttonStyle(.borderedProminent).tint(Palette.action) } else { buttonStyle(.bordered) }
         }
     }
 }
@@ -81,7 +100,7 @@ struct ToolbarAction: View {
     @State private var hovering = false
     var body: some View {
         Button(action: action) { Image(systemName: symbol).font(.system(size: 14, weight: .medium)).frame(width: 30, height: 32) }
-            .buttonStyle(.plain).background(hovering && !disabled ? Color.primary.opacity(0.08) : .clear, in: Circle())
+            .buttonStyle(.plain).foregroundStyle(Palette.accent).background(hovering && !disabled ? Palette.input : .clear, in: Circle())
             .onHover { hovering = $0 }.disabled(disabled).opacity(disabled ? 0.4 : 1).help(title).accessibilityLabel(title)
     }
 }

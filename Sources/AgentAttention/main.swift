@@ -216,11 +216,11 @@ struct FloatingQuestion: View {
     }
 }
 if let index = CommandLine.arguments.firstIndex(of: "--preview-floating"), CommandLine.arguments.count > index + 1 {
-    do { try ReleasePreview.captureDashboard(to: URL(fileURLWithPath: CommandLine.arguments[index + 1]), floating: true); exit(0) }
+    do { try ReleasePreview.captureDashboard(to: URL(fileURLWithPath: CommandLine.arguments[index + 1]), floating: true, dark: CommandLine.arguments.contains("--preview-dark")); exit(0) }
     catch { FileHandle.standardError.write(Data(error.localizedDescription.utf8)); exit(1) }
 }
 if let index = CommandLine.arguments.firstIndex(of: "--preview-dashboard"), CommandLine.arguments.count > index + 1 {
-    do { try ReleasePreview.captureDashboard(to: URL(fileURLWithPath: CommandLine.arguments[index + 1])); exit(0) }
+    do { try ReleasePreview.captureDashboard(to: URL(fileURLWithPath: CommandLine.arguments[index + 1]), dark: CommandLine.arguments.contains("--preview-dark")); exit(0) }
     catch { FileHandle.standardError.write(Data(error.localizedDescription.utf8)); exit(1) }
 }
 if let index = CommandLine.arguments.firstIndex(of: "--preview-data"), CommandLine.arguments.count > index + 1 {

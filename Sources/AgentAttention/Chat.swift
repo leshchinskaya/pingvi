@@ -168,7 +168,7 @@ struct ChatView: View {
                                 }
                                 if message.state == "checked" { Text("Проверено вами в исходной сессии").font(.caption2).foregroundStyle(.secondary) }
                             }.padding(message.role == "user" ? 13 : 0)
-                                .background(message.role == "user" ? Palette.accent.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 14))
+                                .background(message.role == "user" ? Palette.selection : .clear, in: RoundedRectangle(cornerRadius: 14))
                         }
                         if model.history?.messages.isEmpty == true && model.history?.context.isEmpty == true {
                             Text("Сообщения появятся здесь. Можно написать первое сообщение, когда агент готов.").font(.callout).foregroundStyle(.secondary).padding(.vertical, 24)
@@ -187,7 +187,7 @@ struct ChatView: View {
                     Text(model.history?.canSend == true ? "⌘Enter — отправить" : (model.history?.reason ?? "Проверяем готовность агента…")).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 8)
                     Button { model.send(session, store: store) } label: { Image(systemName: model.sending ? "hourglass" : "arrow.up").frame(width: 24, height: 24) }
-                        .buttonStyle(.borderedProminent).keyboardShortcut(.return, modifiers: .command).help("Отправить сообщение")
+                        .buttonStyle(.borderedProminent).tint(Palette.action).keyboardShortcut(.return, modifiers: .command).help("Отправить сообщение")
                         .disabled(model.sending || model.history?.canSend != true || draft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }.padding(12).surface(radius: 16)
@@ -233,7 +233,7 @@ struct NewChatView: View {
             HStack {
                 if creating { ProgressView().controlSize(.small); Text("Создаём диалог…").font(.caption) }
                 Spacer()
-                Button("Начать диалог") { create() }.buttonStyle(.borderedProminent).keyboardShortcut(.return, modifiers: .command)
+                Button("Начать диалог") { create() }.buttonStyle(.borderedProminent).tint(Palette.action).keyboardShortcut(.return, modifiers: .command)
                     .disabled(creating || preferences.saved.project.isEmpty || preferences.saved.firstMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }.padding(26).frame(width: 540).interactiveDismissDisabled(creating)

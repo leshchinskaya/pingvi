@@ -3,13 +3,6 @@ import AppKit
 import UserNotifications
 import ApplicationServices
 
-enum Palette {
-    static let accent = Color(red: 0.18, green: 0.40, blue: 0.88)
-    static let navy = Color(red: 0.08, green: 0.19, blue: 0.39)
-    static let canvas = Color(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(red: 0.07, green: 0.11, blue: 0.19, alpha: 1) : NSColor(red: 0.95, green: 0.97, blue: 1, alpha: 1) })
-    static let sidebar = Color(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(red: 0.09, green: 0.15, blue: 0.25, alpha: 1) : NSColor(red: 0.90, green: 0.94, blue: 1, alpha: 1) })
-}
-
 func stateColor(_ status: String) -> Color {
     switch status { case "waiting", "unconfirmed": return Color(red: 0.96, green: 0.35, blue: 0.36)
     case "working": return .orange; case "done": return Color(red: 0.25, green: 0.78, blue: 0.53)
@@ -59,7 +52,7 @@ struct ContentView: View {
                     ToolbarAction(symbol: "arrow.clockwise", title: "Обновить сессии", disabled: store.polling) { store.poll() }
                     ToolbarAction(symbol: "gearshape", title: "Настройки") { store.showSettings?() }
                     if let onClose { ToolbarAction(symbol: "xmark", title: "Закрыть панель", action: onClose) }
-                }.padding(3).background(Color(nsColor: .controlBackgroundColor).opacity(0.7), in: RoundedRectangle(cornerRadius: 10))
+                }.padding(3).background(Palette.surface, in: RoundedRectangle(cornerRadius: 10))
             }.padding(.horizontal, 18).padding(.vertical, 12)
             Divider()
             if Installation.needsMove() {
@@ -78,7 +71,7 @@ struct ContentView: View {
                         Spacer()
                         if store.pending.count > 1 { Button("Следующий вопрос") { store.nextQuestion() }.buttonStyle(.plain).foregroundStyle(Palette.accent) }
                     }.font(.caption.weight(.medium)).padding(.horizontal, 20).padding(.vertical, 12)
-                    SessionDetailView(store: store, session: session).id(session.id).padding(18).background(Color(nsColor: .controlBackgroundColor))
+                    SessionDetailView(store: store, session: session).id(session.id).padding(18).background(Palette.canvas)
                 } else {
                     sidebar
                 }
@@ -88,7 +81,7 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         if let session = store.current { SessionDetailView(store: store, session: session).id(session.id).padding(28) }
                         else { ContentUnavailableView("Ваши агенты — в одном месте", systemImage: "bubble.left.and.bubble.right", description: Text("Запускайте сессии как обычно. Когда агент задаст вопрос, он появится здесь.")) }
-                    }.frame(minWidth: 350, maxWidth: .infinity, maxHeight: .infinity).background(Color(nsColor: .controlBackgroundColor))
+                    }.frame(minWidth: 350, maxWidth: .infinity, maxHeight: .infinity).background(Palette.canvas)
                 }
             }
             if let message = store.message {
@@ -114,7 +107,7 @@ struct ContentView: View {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField("Поиск диалога", text: $search).textFieldStyle(.plain).focused($searching)
                 if !search.isEmpty { Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain).foregroundStyle(.secondary).help("Очистить поиск") }
-            }.padding(10).background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
+            }.padding(10).background(Palette.input, in: RoundedRectangle(cornerRadius: 10))
             HStack(spacing: 4) {
                 ForEach(SessionFilter.allCases, id: \.self) { item in
                     Button { filter = item } label: {
@@ -123,11 +116,11 @@ struct ContentView: View {
                             if item == .waiting && !store.pending.isEmpty { Text("\(store.pending.count)").fontWeight(.bold) }
                         }.font(.system(size: 11, weight: filter == item ? .semibold : .regular))
                             .padding(.vertical, 7).frame(maxWidth: .infinity)
-                            .background(filter == item ? Palette.accent : .clear, in: RoundedRectangle(cornerRadius: 8))
+                            .background(filter == item ? Palette.action : .clear, in: RoundedRectangle(cornerRadius: 8))
                             .foregroundStyle(filter == item ? Color.white : Color.secondary)
                     }.buttonStyle(.plain).accessibilityAddTraits(filter == item ? .isSelected : [])
                 }
-            }.padding(3).background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 11))
+            }.padding(3).background(Palette.input, in: RoundedRectangle(cornerRadius: 11))
             ScrollView { sessionList.padding(.bottom, 8) }.scrollIndicators(.hidden)
             HStack(spacing: 6) {
                 Circle().fill(store.errors.isEmpty ? Color.green : Color.orange).frame(width: 5, height: 5)
@@ -136,7 +129,7 @@ struct ContentView: View {
                 Text("⌘F").font(.system(size: 10)).foregroundStyle(.tertiary)
             }
             Button("") { searching = true }.keyboardShortcut("f", modifiers: .command).hidden().frame(height: 0)
-        }.padding(14).background(Palette.canvas)
+        }.padding(14).background(LinearGradient(colors: [Palette.sidebar, Palette.canvas], startPoint: .topLeading, endPoint: .bottomTrailing))
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: filter)
     }
     var sessionList: some View {
@@ -186,7 +179,7 @@ struct ContentView: View {
                 Spacer(minLength: 0)
                 if compact { Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(.tertiary).padding(.top, 3) }
             }.padding(.horizontal, 11).padding(.vertical, 12).frame(maxWidth: .infinity, alignment: .leading)
-                .background(store.selected == s.id ? Palette.accent.opacity(0.11) : .clear, in: RoundedRectangle(cornerRadius: 10))
+                .background(store.selected == s.id ? Palette.selection : .clear, in: RoundedRectangle(cornerRadius: 10))
                 .overlay(alignment: .leading) { if store.selected == s.id { Capsule().fill(Palette.accent).frame(width: 3, height: 28) } }
         }.buttonStyle(.plain).contextMenu {
             Button("Открыть сессию") { store.open(s) }
