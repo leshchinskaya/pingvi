@@ -1,0 +1,3 @@
+License texts from astral-sh/python-build-standalone release 20260901.
+https://github.com/astral-sh/python-build-standalone/tree/20260901
+The distribution retains its CPython and pip license files.

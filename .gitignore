@@ -1,0 +1,19 @@
+# Generated files and local state
+.build/
+dist/
+__pycache__/
+*.py[cod]
+.DS_Store
+.env
+.env.*
+*.p12
+*.p8
+*.mobileprovision
+tools/fixture-result.json
+
+# Local investigation notes and screenshots are not public documentation.
+/docs/*
+!/docs/media/
+!/docs/DEVELOPMENT.md
+!/docs/PRIVACY.md
+!/docs/PILOT.txt
