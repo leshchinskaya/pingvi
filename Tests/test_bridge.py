@@ -21,6 +21,31 @@ APPROVAL = '''Would you like to run the following command?
   Press enter to confirm or esc to cancel'''
 
 class ParserTests(unittest.TestCase):
+    def test_current_question_excludes_previous_exchange_and_composer(self):
+        question = 'Сохраним выбранную компоновку.\nКак назвать экран?'
+        screen = ('• Какую компоновку выбрать?\n\n› Карточки\n\n• ' + question
+                  + '\n\n› Ask Codex to do anything\n  gpt-6 medium · ~')
+        parsed = bridge.parse_screen(screen, 'codex')
+        self.assertTrue(parsed['canReply'])
+        self.assertEqual(parsed['question'], question)
+        self.assertEqual(parsed['token'], bridge.digest(screen))
+
+    def test_current_approval_excludes_previous_exchange_but_keeps_command(self):
+        screen = '• Какую компоновку выбрать?\n› Карточки\n\n' + APPROVAL
+        parsed = bridge.parse_screen(screen, 'codex')
+        self.assertEqual(parsed['question'], APPROVAL.split('› 1.')[0].strip())
+        self.assertEqual(len(parsed['options']), 3)
+
+    def test_current_question_keeps_explanation_and_multiple_questions(self):
+        question = 'Как назвать экран?\nПояснение:\n' + '\n'.join('Строка ' + str(i) for i in range(50)) + '\nКакой цвет выбрать?'
+        screen = '• Старый вопрос?\n› Мой ответ\n• ' + question + '\n› Ask Codex to do anything\n  gpt-6 medium · ~'
+        self.assertEqual(bridge.parse_screen(screen, 'codex')['question'], question)
+
+    def test_first_question_and_old_question_followed_by_statement(self):
+        footer = '\n› Ask Codex to do anything\n  gpt-6 medium · ~'
+        self.assertEqual(bridge.parse_screen('• Новый вопрос?' + footer, 'codex')['question'], 'Новый вопрос?')
+        self.assertEqual(bridge.parse_screen('• Старый вопрос?\n› Ответ\n• Всё готово.' + footer, 'codex')['question'], '')
+
     def test_text_reply_submits_instead_of_becoming_a_pasted_newline(self):
         for target in ({'pane': 'test'}, {'tty': '/dev/test', 'pid': '123'}):
             with self.subTest(target=target):
@@ -46,8 +71,8 @@ class ParserTests(unittest.TestCase):
                     return 'ok'
                 def advance(seconds): now[0] += seconds
                 with patch.object(bridge, 'processes', return_value=[{'pid': 123, 'tty': 'test', 'name': 'codex'}]), patch.object(bridge, 'herdr_json', return_value={'pane': {'agent': 'codex'}}), patch.object(bridge, 'run', side_effect=receive), patch.object(bridge.time, 'sleep', side_effect=advance):
-                    bridge.reply({'session': s, 'answers': {'text': 'Второй вариант'}})
-                self.assertEqual(submitted, ['Второй вариант'])
+                    bridge.reply({'session': s, 'answers': {'text': 'Второй вариант\nС пояснением'}})
+                self.assertEqual(submitted, ['Второй вариант\nС пояснением'])
                 self.assertEqual(draft[0], '')
 
     def test_only_live_approval(self):

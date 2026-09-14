@@ -96,6 +96,11 @@ def atomic(path, value):
 def digest(text):
     return hashlib.sha256(text.encode()).hexdigest()
 
+def latest_assistant_text(text):
+    """Separate a terminal turn using CLI message markers, not question marks."""
+    starts = list(re.finditer(r'(?m)^\s*[•●] ', text))
+    return text[starts[-1].end():].strip() if starts else text.strip()
+
 def parse_screen(text, agent):
     """Only recognize live UI footers, never a numbered list in conversational prose."""
     text = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', text).rstrip()
@@ -108,19 +113,28 @@ def parse_screen(text, agent):
         for m in re.finditer(r'(?m)^\s*[›❯]?\s*(\d+)\.\s+(.+)$', tail[approval.start():]):
             options.append({'id': m[1], 'label': m[2].strip()})
     waiting = bool(options)
+    question = ''
+    if waiting:
+        # Keep the action/command together; options are rendered separately by the app.
+        prompt = tail[:approval.start()]
+        headings = list(re.finditer(r'(?im)^\s*Would you like to run the following command\?', prompt))
+        question = prompt[headings[-1].start():].strip() if headings else latest_assistant_text(prompt)
     # A known empty Codex composer + model footer distinguishes agent input from a shell.
     composer = re.search(r'(?m)^\s*› (?:Ask Codex to do anything|Implement \{feature\}|Find and fix a bug in @filename|Write tests for @filename|Explain this codebase|Summarize recent commits)\s*$', tail)
     model_footer = re.search(r'(?m)^\s*(?:gpt-|o[134]-|codex-).+·', tail)
     fields = []
     if not working and not waiting and agent == 'codex' and composer and model_footer:
-        body = tail[:composer.start()].strip()
+        # Use the full visible turn so a long question is not cut at the 45-line tail.
+        full_composer = list(re.finditer(composer.re, text))[-1]
+        body = text[:full_composer.start()].strip()
         # A question must be in the final assistant text, not a previous tool log.
-        body = body.rsplit('\n• ', 1)[-1]
+        body = latest_assistant_text(body)
         if '?' in body and not re.search(r'(?m)^\s*[│└]|^Ran |^Running ', body):
             waiting = True
+            question = body
             fields = [{'id': 'text', 'label': 'Короткий ответ', 'options': [], 'multi': False}]
     return {'status': 'waiting' if waiting else ('working' if working else 'idle'),
-            'question': tail if waiting else '', 'options': options,
+            'question': question, 'options': options,
             'token': digest(text), 'canReply': waiting, 'kind': 'screen', 'fields': fields}
 
 def herdr_json(*args):
@@ -363,8 +377,8 @@ def reply(data):
     answer = data.get('answer', '')
     if parsed['fields']:
         answer = data.get('answers', {}).get('text', '').strip()
-        if not answer or len(answer) > 4000 or any(ord(c) < 32 for c in answer):
-            raise RuntimeError('Введите короткий ответ в одну строку, без управляющих символов.')
+        if not answer or len(answer) > 4000 or any(ord(c) < 32 and c not in '\n\t' for c in answer) or '\x7f' in answer:
+            raise RuntimeError('Введите ответ до 4000 символов, без управляющих символов.')
     elif answer not in [o['id'] for o in parsed['options']]:
         raise RuntimeError('Ответ не соответствует вариантам текущего запроса.')
     if target.get('pane'):

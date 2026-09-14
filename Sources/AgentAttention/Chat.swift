@@ -230,14 +230,12 @@ struct ChatView: View {
             }
             if let error = model.error ?? preferences.persistenceError { Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
             VStack(alignment: .leading, spacing: 8) {
-                TextField("Сообщение агенту…", text: draft, axis: .vertical).textFieldStyle(.plain).lineLimit(3...7)
-                HStack {
-                    Text(model.history?.canSend == true ? "⌘Enter — отправить" : (model.history?.reason ?? "Проверяем готовность агента…")).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 8)
-                    Button { model.send(session, store: store) } label: { Image(systemName: model.sending ? "hourglass" : "arrow.up").frame(width: 24, height: 24) }
-                        .buttonStyle(.borderedProminent).tint(Palette.action).keyboardShortcut(.return, modifiers: .command).help("Отправить сообщение")
-                        .disabled(model.sending || model.history?.canSend != true || draft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                MessageComposer(placeholder: "Сообщение агенту…", text: draft,
+                                canSend: model.history?.canSend == true && !draft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                                sending: model.sending) {
+                    model.send(session, store: store)
                 }
+                Text(model.history?.canSend == true ? "Enter — отправить · Shift+Enter — новая строка" : (model.history?.reason ?? "Проверяем готовность агента…")).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }.padding(12).surface(radius: 16)
         }.task(id: session.id + session.status + session.token) {
             while !Task.isCancelled {

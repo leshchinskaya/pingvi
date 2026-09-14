@@ -258,7 +258,7 @@ struct QuestionView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if !session.question.isEmpty && (session.fields.isEmpty || session.kind != "hook") {
-                        if session.kind == "screen" {
+                        if session.kind == "screen" && !compact {
                             RecentContextView(text: session.question, previous: session.options.isEmpty ? store.local.answeredContext?[session.id] : nil)
                         } else { Text(session.question).font(.system(size: 14)).lineSpacing(5).textSelection(.enabled) }
                     }
@@ -290,16 +290,19 @@ struct QuestionView: View {
                                     }.padding(14).surface(radius: 16, selected: selected(option, in: field))
                                 }.buttonStyle(.plain).disabled(!session.canReply || store.submitting.contains(session.id)).accessibilityAddTraits(selected(option, in: field) ? .isSelected : [])
                             }
-                            TextField(field.options.isEmpty ? "Ваш ответ…" : "Дополнить ответ…", text: Binding(
+                            MessageComposer(placeholder: field.options.isEmpty ? "Ваш ответ…" : "Дополнить ответ…", text: Binding(
                                 get: { field.options.isEmpty ? store.draft(session, field: field.id) : store.comment(session, field: field.id) },
                                 set: { if field.options.isEmpty { store.setDraft(session, field: field.id, value: $0) } else { store.setComment(session, field: field.id, value: $0) } }
-                            ), axis: .vertical).textFieldStyle(.plain).lineLimit(2...5).padding(12).background(Palette.input.opacity(0.45), in: RoundedRectangle(cornerRadius: 10)).disabled(!session.canReply || store.submitting.contains(session.id))
+                            ), canSend: session.canReply && !store.answers(session).values.contains { $0.isEmpty },
+                                sending: store.submitting.contains(session.id), showsSend: field.id == session.fields.last?.id) {
+                                store.reply(session)
+                            }.padding(12).background(Palette.input.opacity(0.45), in: RoundedRectangle(cornerRadius: 10)).disabled(!session.canReply || store.submitting.contains(session.id))
                             if !field.options.isEmpty { Text("Можно дополнить выбранный вариант или написать свой ответ.").font(.caption).foregroundStyle(.secondary) }
                         }
                     }
                     if !session.fields.isEmpty {
                         HStack {
-                            Button { store.reply(session) } label: { Label(store.submitting.contains(session.id) ? "Отправляем…" : "Отправить ответ", systemImage: "paperplane.fill").fontWeight(.semibold).padding(.vertical, 4) }.buttonStyle(ReplyButtonStyle()).controlSize(.large).keyboardShortcut(.return, modifiers: .command).help("Отправить ответ · ⌘Enter").disabled(!session.canReply || store.answers(session).values.contains { $0.isEmpty } || store.submitting.contains(session.id))
+                            Text("Enter — отправить · Shift+Enter — новая строка").font(.caption2).foregroundStyle(.secondary)
                             Spacer()
                             if session.fields.contains(where: { !store.draft(session, field: $0.id).isEmpty || !store.comment(session, field: $0.id).isEmpty }) { Label("Черновик сохранён", systemImage: "checkmark").font(.caption2).foregroundStyle(.secondary) }
                         }
