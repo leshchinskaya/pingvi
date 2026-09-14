@@ -133,6 +133,16 @@ def read_messages(path, agent):
             else: messages[old] = record
     return messages[-200:], partial or len(messages) > 200
 
+def search_history(data):
+    """Return bounded native history without requiring a live terminal or changing receipts."""
+    session = data['session']
+    path = transcript(session)
+    if path is None:
+        return dict(messages=[], partial=True, available=False)
+    messages, partial = read_messages(path, session['agent'])
+    return dict(messages=messages, partial=partial, available=True)
+
+
 def question_context(data):
     """Read native messages only; never reconcile receipts or send terminal input."""
     session = data['session']

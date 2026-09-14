@@ -48,8 +48,12 @@ struct ContentView: View {
         return store.workspaces.first { $0.id == workspace }?.name ?? "Все пространства"
     }
     var waitingCount: Int { workspaceSessions.filter { store.needsAttention($0) }.count }
+    var searchQuery: String { search.trimmingCharacters(in: .whitespacesAndNewlines) }
+    var searchSessions: [Session] {
+        workspaceSessions.filter { filter == .waiting ? store.needsAttention($0) : filter.accepts($0) }
+    }
     var filtered: [Session] {
-        workspaceSessions.filter { (filter == .waiting ? store.needsAttention($0) : filter.accepts($0)) && (search.isEmpty || (store.title($0) + $0.project + $0.agent).localizedCaseInsensitiveContains(search)) }
+        searchSessions.filter { searchQuery.isEmpty || (store.title($0) + $0.project + $0.agent).localizedCaseInsensitiveContains(searchQuery) }
     }
     var body: some View {
         VStack(spacing: 0) {
@@ -162,7 +166,7 @@ struct ContentView: View {
             }.padding(.top, 4)
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("Поиск диалога", text: $search).textFieldStyle(.plain).focused($searching)
+                TextField("Поиск диалогов и сообщений", text: $search).textFieldStyle(.plain).focused($searching)
                 if !search.isEmpty { Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain).foregroundStyle(.secondary).help("Очистить поиск") }
             }.padding(10).background(Palette.input, in: RoundedRectangle(cornerRadius: 10))
             HStack(spacing: 4) {
@@ -182,7 +186,14 @@ struct ContentView: View {
                     }.buttonStyle(.plain).accessibilityAddTraits(filter == item ? .isSelected : [])
                 }
             }.padding(3).background(Palette.input, in: RoundedRectangle(cornerRadius: 11))
-            ScrollView { sessionList.padding(.bottom, 8) }.scrollIndicators(.hidden)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    sessionList
+                    if !searchQuery.isEmpty {
+                        ConversationSearchView(store: store, sessions: searchSessions, query: searchQuery)
+                    }
+                }.padding(.bottom, 8)
+            }.scrollIndicators(.hidden)
             HStack(spacing: 6) {
                 Circle().fill(store.errors.isEmpty ? Color.green : Color.orange).frame(width: 5, height: 5)
                 Text(store.lastUpdate == nil ? "Подключаемся…" : "Обновляется автоматически").font(.system(size: 10)).foregroundStyle(.secondary)
@@ -208,7 +219,9 @@ struct ContentView: View {
                 if filter == .done { ForEach(finished) { row($0) } }
                 else { DisclosureGroup("Завершённые · \(finished.count)", isExpanded: $showFinished) { ForEach(finished) { row($0) } }.font(.caption).padding(.top, 12) }
             }
-            if filtered.isEmpty {
+            if filtered.isEmpty && !searchQuery.isEmpty {
+                Text("По названию или проекту совпадений нет").font(.caption).foregroundStyle(.secondary)
+            } else if filtered.isEmpty {
                 VStack(spacing: 10) {
                     Image(systemName: search.isEmpty ? "checkmark.bubble" : "magnifyingglass").font(.system(size: 28)).foregroundStyle(Palette.accent.opacity(0.7))
                     Text(search.isEmpty ? (filter == .waiting ? "Ответов не ждут" : "Здесь пока пусто") : "Ничего не найдено").font(.headline)

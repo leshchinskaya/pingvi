@@ -40,7 +40,16 @@ enum ReleasePreview {
         store.local.drafts = [question.token: ["layout": "Карточки"]]
         store.selected = question.id
         let size = NSSize(width: floating ? 1120 : 1020, height: floating ? 760 : 680)
-        let content = settings ? AnyView(SettingsView(store: store, preview: true)) : floating
+        let searchMessages = (0..<30).map {
+            ChatMessage(id: "earlier-\($0)", role: "assistant", text: "Предыдущее обсуждение \($0).\nПроверены требования и сценарии обновления профиля.", state: "received")
+        } + [
+            ChatMessage(id: "search-match", role: "assistant", text: "Миграция профилей находится в db/profile.sql.\nПеред обновлением нужно проверить перенос настроек уведомлений.", state: "received"),
+            ChatMessage(id: "search-followup", role: "user", text: "Добавь проверку сохранения настроек после обновления.", state: "received")
+        ]
+        let content = CommandLine.arguments.contains("--preview-search")
+            ? AnyView(SearchConversationView(store: store, session: question,
+                history: SearchHistory(messages: searchMessages, partial: false, available: true), messageID: "search-match", query: "миграция"))
+            : settings ? AnyView(SettingsView(store: store, preview: true)) : floating
             ? AnyView(FloatingPreviewScene(store: store, id: question.id))
             : AnyView(ContentView(store: store))
         let view = NSHostingView(rootView: content.frame(width: size.width, height: size.height))
