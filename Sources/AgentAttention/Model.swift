@@ -312,22 +312,16 @@ final class Store: ObservableObject {
         guard notificationsEnabled else { return }
         let c = UNMutableNotificationContent(); c.title = title(s); c.subtitle = s.agent + " · " + s.source
         c.body = String(body.prefix(240)); c.userInfo = ["session": s.id, "kind": kind]
-        MessageNotifications.send(c, identifier: kind + ":" + s.id + ":" + s.token, conversation: s.id)
+        MessageNotifications.send(c, identifier: kind + ":" + s.id + ":" + s.token, conversation: s.id) { [weak self] error in
+            if let error { self?.message = "Уведомление: " + error.localizedDescription }
+        }
     }
     func testNotification() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge]) { [weak self] granted, error in
-            guard granted else {
-                DispatchQueue.main.async { self?.message = error?.localizedDescription ?? "Разрешите уведомления Pingvi в настройках macOS → Уведомления." }
-                return
-            }
-            let content = UNMutableNotificationContent()
-            content.title = "Pingvi на связи 🐧"
-            content.body = "Я принесу сюда вопросы ваших агентов. Нажмите, чтобы открыть очередь."
-            DispatchQueue.main.async {
-                MessageNotifications.send(content, identifier: "pingvi-test", conversation: "pingvi-test") { error in
-                    if let error { DispatchQueue.main.async { self?.message = "Уведомление: " + error.localizedDescription } }
-                }
-            }
+        let content = UNMutableNotificationContent()
+        content.title = "Pingvi на связи 🐧"
+        content.body = "Я принесу сюда вопросы ваших агентов. Нажмите, чтобы открыть очередь."
+        MessageNotifications.send(content, identifier: "pingvi-test-" + UUID().uuidString, conversation: "pingvi-test") { [weak self] error in
+            self?.message = error.map { "Уведомление: " + $0.localizedDescription } ?? MessageNotifications.delivery.lastResult
         }
     }
     func dismiss(_ s: Session) { local.dismissed.insert(s.token); save(); closeQuestion?() }

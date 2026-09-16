@@ -65,7 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         store.showQuestion = { [weak self] id in self?.showPanel(id) }
         store.closeQuestion = { [weak self] in self?.panel?.orderOut(nil); self?.panelSession = nil; self?.popover.performClose(nil) }
         UNUserNotificationCenter.current().delegate = self
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge]) { _, _ in }
+        if !Installation.needsMove() { MessageNotifications.delivery.requestPermission() }
         refresh(); showWindow(); store.start()
         if CommandLine.arguments.contains("--show-settings") { showSettings() }
         if CommandLine.arguments.contains("--test-notification") {

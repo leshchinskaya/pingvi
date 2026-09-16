@@ -532,7 +532,7 @@ struct SettingsView: View {
     @ObservedObject private var appearance = IconAppearance.shared
     @State private var page: SettingsPage? = UserDefaults.standard.bool(forKey: "setupComplete") ? .general : .connections
     @State private var search = ""
-    @State private var notificationStatus = "Проверяем…"
+    @ObservedObject private var notificationDelivery = MessageNotifications.delivery
     @AppStorage("dock") private var dock = true
     @AppStorage("menubar") private var menubar = true
     @AppStorage("questionNotifications") private var questions = true
@@ -612,6 +612,9 @@ struct SettingsView: View {
             .onChange(of: terminal) { _, _ in store.poll() }
             .onChange(of: theme) { _, _ in store.onChange?() }
             .onAppear { if !preview { refreshAuthorization() } }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                if !preview { refreshAuthorization() }
+            }
     }
     var general: some View {
         Group {
@@ -630,7 +633,10 @@ struct SettingsView: View {
                     }
                 }
             } footer: { Text("Нужен «Универсальный доступ». Список в строке меню доступен без дополнительного разрешения.") }
-            Section { LabeledContent("Версия", value: "0.7.0-beta.6"); Text("Изменения сохраняются автоматически.").foregroundStyle(.secondary) }
+            Section {
+                LabeledContent("Версия", value: (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev") + " (" + (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "local") + ")")
+                Text("Изменения сохраняются автоматически.").foregroundStyle(.secondary)
+            }
         }
     }
     var notifications: some View {
@@ -643,11 +649,31 @@ struct SettingsView: View {
                 Toggle("Показывать карточку поверх окон", isOn: $floating)
             } header: { Text("Вопросы") } footer: { Text("Карточка открывается автоматически, не забирая фокус клавиатуры. Остальные вопросы остаются в очереди.") }
             Section {
-                LabeledContent("Разрешение macOS", value: notificationStatus)
+                if Installation.needsMove() { Text(Installation.message).font(.caption).foregroundStyle(.orange) }
+                LabeledContent("Показ в macOS", value: notificationDelivery.access?.summary ?? "Проверяем…")
+                if let access = notificationDelivery.access {
+                    Text(access.guidance).font(.caption).foregroundStyle(.secondary)
+                    if access.authorization == .notDetermined {
+                        Button("Разрешить уведомления") { notificationDelivery.requestPermission() }.disabled(Installation.needsMove())
+                    }
+                }
                 HStack {
                     Button("Настройки macOS…") { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension")!) }
                     Spacer()
-                    Button("Тестовое уведомление") { store.testNotification(); refreshAuthorization() }
+                    Button("Тестовое уведомление") { store.testNotification() }.disabled(Installation.needsMove())
+                }
+                if let result = notificationDelivery.lastResult { Text(result).font(.caption).textSelection(.enabled) }
+                Button("Копировать диагностику уведомлений") {
+                    let access = notificationDelivery.access
+                    let report = [
+                        "Pingvi " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev") + " build " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "local"),
+                        ProcessInfo.processInfo.operatingSystemVersionString,
+                        "Installation needs move: \(Installation.needsMove())",
+                        "Question notifications: \(questions); completion notifications: \(completions)",
+                        "Authorization: \(access?.authorization.rawValue ?? -1); alerts: \(access?.alerts ?? false); banners: \(access?.canShowBanner ?? false); notification center: \(access?.center ?? false)",
+                        notificationDelivery.lastResult ?? "Тест ещё не выполнялся"
+                    ].joined(separator: "\n")
+                    NSPasteboard.general.clearContents(); NSPasteboard.general.setString(report, forType: .string)
                 }
             } footer: { Text("Стиль баннеров и режим «Фокусирование» управляются в настройках macOS.") }
         }
@@ -685,11 +711,7 @@ struct SettingsView: View {
         }
     }
     func refreshAuthorization() {
-        UNUserNotificationCenter.current().getNotificationSettings { settings in
-            DispatchQueue.main.async {
-                switch settings.authorizationStatus { case .authorized, .provisional, .ephemeral: notificationStatus = "Разрешены"; case .denied: notificationStatus = "Выключены"; default: notificationStatus = "Не запрошено" }
-            }
-        }
+        notificationDelivery.refresh()
     }
 }
 

@@ -30,7 +30,7 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>NSPrincipalClass</key><string>NSApplication</string>
 <key>CFBundleExecutable</key><string>AgentAttention</string>
-<key>CFBundleVersion</key><string>16</string>
+<key>CFBundleVersion</key><string>17</string>
 <key>CFBundleShortVersionString</key><string>0.7.0</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSHighResolutionCapable</key><true/>
