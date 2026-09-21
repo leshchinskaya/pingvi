@@ -90,6 +90,18 @@ targets:
         GENERATE_INFOPLIST_FILE: true
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/Pingvi.app/Pingvi
         BUNDLE_LOADER: $(TEST_HOST)
+  PingviMobileUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: iOSUITests
+    dependencies:
+      - target: PingviMobile
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.pingvi.mobile.leshchinskaya.uitests
+        GENERATE_INFOPLIST_FILE: true
+        TEST_TARGET_NAME: PingviMobile
 schemes:
   PingviMobile:
     build:
@@ -97,9 +109,11 @@ schemes:
         PingviMobile: all
         PingviWatch: all
         PingviMobileTests: [test]
+        PingviMobileUITests: [test]
     test:
       targets:
         - PingviMobileTests
+        - PingviMobileUITests
     run:
       config: Debug
     archive:

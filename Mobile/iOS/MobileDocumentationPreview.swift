@@ -12,6 +12,14 @@ enum MobileDocumentationPreview {
 
     static let conversationSessionID = "demo-completed"
 
+    private static var usesLongConversationFixture: Bool {
+        ProcessInfo.processInfo.arguments.contains("--ui-test-long-conversation")
+    }
+
+    static var delaysConversationFixture: Bool {
+        ProcessInfo.processInfo.arguments.contains("--ui-test-delayed-conversation")
+    }
+
     static var isEnabled: Bool {
         ProcessInfo.processInfo.arguments.contains("--documentation-preview")
     }
@@ -120,6 +128,45 @@ enum MobileDocumentationPreview {
         )
     }()
 
+    private static var conversationMessages: [PingviChatMessage] {
+        if usesLongConversationFixture {
+            return (1...24).map { index in
+                PingviChatMessage(
+                    id: "ui-test-message-\(index)",
+                    role: index.isMultiple(of: 2) ? .assistant : .user,
+                    text: index == 24 ? "Последнее сообщение диалога" : "Сообщение истории номер \(index). Проверяем начальную позицию длинной переписки.",
+                    state: .received
+                )
+            }
+        }
+        return [
+            PingviChatMessage(
+                id: "demo-message-1",
+                role: .user,
+                text: "Добавь уведомления на iPhone и Apple Watch, оставив обмен данными локальным.",
+                state: .received
+            ),
+            PingviChatMessage(
+                id: "demo-message-2",
+                role: .assistant,
+                text: "Готово. Устройства связываются QR-кодом и обмениваются зашифрованными сообщениями в одной Wi-Fi сети.",
+                state: .received
+            ),
+            PingviChatMessage(
+                id: "demo-message-3",
+                role: .user,
+                text: "Добавь быстрые ответы и просмотр готовых результатов.",
+                state: .checked
+            ),
+            PingviChatMessage(
+                id: "demo-message-4",
+                role: .assistant,
+                text: "Добавил очередь вопросов, историю диалогов и ответы прямо с iPhone. Готовый результат можно открыть из уведомления или вкладки «Диалоги».",
+                state: .received
+            )
+        ]
+    }
+
     static let conversations: [String: PingviConversation] = [
         conversationSessionID: PingviConversation(
             sessionID: conversationSessionID,
@@ -128,32 +175,7 @@ enum MobileDocumentationPreview {
             agent: "codex",
             source: "herdr",
             status: "done",
-            messages: [
-                PingviChatMessage(
-                    id: "demo-message-1",
-                    role: .user,
-                    text: "Добавь уведомления на iPhone и Apple Watch, оставив обмен данными локальным.",
-                    state: .received
-                ),
-                PingviChatMessage(
-                    id: "demo-message-2",
-                    role: .assistant,
-                    text: "Готово. Устройства связываются QR-кодом и обмениваются зашифрованными сообщениями в одной Wi-Fi сети.",
-                    state: .received
-                ),
-                PingviChatMessage(
-                    id: "demo-message-3",
-                    role: .user,
-                    text: "Добавь быстрые ответы и просмотр готовых результатов.",
-                    state: .checked
-                ),
-                PingviChatMessage(
-                    id: "demo-message-4",
-                    role: .assistant,
-                    text: "Добавил очередь вопросов, историю диалогов и ответы прямо с iPhone. Готовый результат можно открыть из уведомления или вкладки «Диалоги».",
-                    state: .received
-                )
-            ],
+            messages: conversationMessages,
             partial: false,
             context: "",
             canSend: true,

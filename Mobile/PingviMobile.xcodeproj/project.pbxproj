@@ -22,6 +22,7 @@
 		B2B141E9BC43C537966D1FBD /* MobileAppearanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A29B9742A6016EDBDAD94FE3 /* MobileAppearanceTests.swift */; };
 		B39B5CC4D63A0808A2D57EE7 /* MobileNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDC34B8597AB64FD20C17368 /* MobileNotifications.swift */; };
 		B91C4AEB6312F66CC5B0863C /* MobileAppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A5B847016498FA991C2F7D0 /* MobileAppModel.swift */; };
+		D424557DDADD6B4887B6440F /* MobileConversationScrollTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4386C1634B61C015C445D50 /* MobileConversationScrollTests.swift */; };
 		D4B5A2EC4ACAF35D1A2237AA /* PingviWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200FAA5079F1E2D74AFE4826 /* PingviWatchApp.swift */; };
 		D62C70A6E9BE5E9440990DBD /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A39674D81122C9B771B5031E /* Localizable.xcstrings */; };
 		E09D7C9CF978EA81C20E6FC5 /* PingviLink in Frameworks */ = {isa = PBXBuildFile; productRef = 2EBA99635BB11C90A9B87D47 /* PingviLink */; };
@@ -30,6 +31,13 @@
 
 /* Begin PBXContainerItemProxy section */
 		181BB1B45D5ACE112B6E452E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D7EC73487901F0EF7AD60F14 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BB34C1E9B90714A39BA2A47E;
+			remoteInfo = PingviMobile;
+		};
+		82C456FB8EC2DF3C280F7662 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = D7EC73487901F0EF7AD60F14 /* Project object */;
 			proxyType = 1;
@@ -74,6 +82,7 @@
 		9330C5757B9D303E7241A38E /* PhoneWatchBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneWatchBridge.swift; sourceTree = "<group>"; };
 		A29B9742A6016EDBDAD94FE3 /* MobileAppearanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileAppearanceTests.swift; sourceTree = "<group>"; };
 		A39674D81122C9B771B5031E /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		A4386C1634B61C015C445D50 /* MobileConversationScrollTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileConversationScrollTests.swift; sourceTree = "<group>"; };
 		AC40A1FF5F3E1BE307B9AEE4 /* MobileDocumentationPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileDocumentationPreview.swift; sourceTree = "<group>"; };
 		B1A49E73D53535453DA57220 /* PingviMobile.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PingviMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BDC34B8597AB64FD20C17368 /* MobileNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileNotifications.swift; sourceTree = "<group>"; };
@@ -82,6 +91,7 @@
 		CF392AC29F3485FCD2206BBD /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D35121EF6D7DCC5DCC09DCF0 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		F26A97CBE46D07D2315DF3B0 /* WatchStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchStore.swift; sourceTree = "<group>"; };
+		FDDB520502B69E194CEC42AB /* PingviMobileUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PingviMobileUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -109,6 +119,7 @@
 			children = (
 				8211C7E84ABB8505BD48A025 /* iOS */,
 				FCF7F936C100BC3D9FE3C1C6 /* iOSTests */,
+				A2FD5CCD5C0CEAF8692DABE7 /* iOSUITests */,
 				60F07AA57AA8095C2D6CB194 /* Packages */,
 				A1B09DA4F2AA262A26AA34E9 /* Watch */,
 				B5606F7AD5F9F383824059B7 /* Products */,
@@ -154,11 +165,20 @@
 			path = Watch;
 			sourceTree = "<group>";
 		};
+		A2FD5CCD5C0CEAF8692DABE7 /* iOSUITests */ = {
+			isa = PBXGroup;
+			children = (
+				A4386C1634B61C015C445D50 /* MobileConversationScrollTests.swift */,
+			);
+			path = iOSUITests;
+			sourceTree = "<group>";
+		};
 		B5606F7AD5F9F383824059B7 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				B1A49E73D53535453DA57220 /* PingviMobile.app */,
 				0F914F4A014C4C9131AC6557 /* PingviMobileTests.xctest */,
+				FDDB520502B69E194CEC42AB /* PingviMobileUITests.xctest */,
 				805647583CE1CBD8D2F23CD2 /* PingviWatch.app */,
 			);
 			name = Products;
@@ -192,6 +212,24 @@
 			productName = PingviMobileTests;
 			productReference = 0F914F4A014C4C9131AC6557 /* PingviMobileTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		1266332370A1014E27B39A09 /* PingviMobileUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3A3D2380BA1CF1FA70B5668B /* Build configuration list for PBXNativeTarget "PingviMobileUITests" */;
+			buildPhases = (
+				D53492F1DC2C3A60DA664DE3 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8ED672856D251D9B50D87A7A /* PBXTargetDependency */,
+			);
+			name = PingviMobileUITests;
+			packageProductDependencies = (
+			);
+			productName = PingviMobileUITests;
+			productReference = FDDB520502B69E194CEC42AB /* PingviMobileUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 		3FA6AA11B7944D256EFB8FDE /* PingviWatch */ = {
 			isa = PBXNativeTarget;
@@ -248,6 +286,11 @@
 						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
+					1266332370A1014E27B39A09 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+						TestTargetID = BB34C1E9B90714A39BA2A47E;
+					};
 					3FA6AA11B7944D256EFB8FDE = {
 						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
@@ -278,6 +321,7 @@
 				BB34C1E9B90714A39BA2A47E /* PingviMobile */,
 				3FA6AA11B7944D256EFB8FDE /* PingviWatch */,
 				02BBDCE017A012CE172CCDE6 /* PingviMobileTests */,
+				1266332370A1014E27B39A09 /* PingviMobileUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -337,6 +381,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D53492F1DC2C3A60DA664DE3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D424557DDADD6B4887B6440F /* MobileConversationScrollTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -350,9 +402,31 @@
 			target = 3FA6AA11B7944D256EFB8FDE /* PingviWatch */;
 			targetProxy = C635A938646472252450578D /* PBXContainerItemProxy */;
 		};
+		8ED672856D251D9B50D87A7A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BB34C1E9B90714A39BA2A47E /* PingviMobile */;
+			targetProxy = 82C456FB8EC2DF3C280F7662 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		1698FC833EC46B03CC7E71A4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.pingvi.mobile.leshchinskaya.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = PingviMobile;
+			};
+			name = Release;
+		};
 		2465C506D03852F53AB961D0 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -397,6 +471,23 @@
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pingvi.app/Pingvi";
+			};
+			name = Debug;
+		};
+		331D1D3E67DD72A3E6142B5E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.pingvi.mobile.leshchinskaya.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = PingviMobile;
 			};
 			name = Debug;
 		};
@@ -583,6 +674,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		3A3D2380BA1CF1FA70B5668B /* Build configuration list for PBXNativeTarget "PingviMobileUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				331D1D3E67DD72A3E6142B5E /* Debug */,
+				1698FC833EC46B03CC7E71A4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		3B604B304F79B372EACD1B53 /* Build configuration list for PBXProject "PingviMobile" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

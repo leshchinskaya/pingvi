@@ -37,6 +37,20 @@
          </BuildActionEntry>
          <BuildActionEntry
             buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "1266332370A1014E27B39A09"
+               BuildableName = "PingviMobileUITests.xctest"
+               BlueprintName = "PingviMobileUITests"
+               ReferencedContainer = "container:PingviMobile.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
             buildForRunning = "YES"
             buildForProfiling = "YES"
             buildForArchiving = "YES"
@@ -75,6 +89,17 @@
                BlueprintIdentifier = "02BBDCE017A012CE172CCDE6"
                BuildableName = "PingviMobileTests.xctest"
                BlueprintName = "PingviMobileTests"
+               ReferencedContainer = "container:PingviMobile.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "1266332370A1014E27B39A09"
+               BuildableName = "PingviMobileUITests.xctest"
+               BlueprintName = "PingviMobileUITests"
                ReferencedContainer = "container:PingviMobile.xcodeproj">
             </BuildableReference>
          </TestableReference>

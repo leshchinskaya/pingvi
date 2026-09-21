@@ -55,8 +55,14 @@ final class MobileAppModel: ObservableObject {
         if MobileDocumentationPreview.isEnabled {
             self.pairing = MobileDocumentationPreview.pairing
             self.snapshot = MobileDocumentationPreview.snapshot
-            self.conversations = MobileDocumentationPreview.conversations
+            self.conversations = MobileDocumentationPreview.delaysConversationFixture ? [:] : MobileDocumentationPreview.conversations
             self.state = .connected
+            if MobileDocumentationPreview.delaysConversationFixture {
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .milliseconds(300))
+                    self?.conversations = MobileDocumentationPreview.conversations
+                }
+            }
         }
 #endif
         watch.onReply = { [weak self] reply, completion in

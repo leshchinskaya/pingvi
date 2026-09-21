@@ -369,6 +369,9 @@ struct ConversationView: View {
     @EnvironmentObject private var model: MobileAppModel
     let session: PingviSessionSummary
     @State private var draft = ""
+    @State private var positionedAtLatestMessage = false
+
+    private let bottomAnchorID = "conversation-bottom"
 
     private var currentSession: PingviSessionSummary {
         model.snapshot.sessions.first(where: { $0.id == session.id }) ?? session
@@ -382,60 +385,66 @@ struct ConversationView: View {
         ZStack {
             MobileAmbientBackground()
             VStack(spacing: 0) {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 16) {
-                        conversationHeader
-                        if let question {
-                            NavigationLink {
-                                QuestionView(question: question)
-                            } label: {
-                                HStack {
-                                    Image(systemName: "hand.raised.fill").foregroundStyle(.orange)
-                                    Text("Агент ждёт ответа").font(.headline)
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
+                ScrollViewReader { reader in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 16) {
+                            conversationHeader
+                            if let question {
+                                NavigationLink {
+                                    QuestionView(question: question)
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "hand.raised.fill").foregroundStyle(.orange)
+                                        Text("Агент ждёт ответа").font(.headline)
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                    }
+                                    .padding(16)
+                                    .mobileGlassCard(radius: 18, selected: true)
                                 }
-                                .padding(16)
-                                .mobileGlassCard(radius: 18, selected: true)
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
-                        }
-                        if model.loadingConversations.contains(session.id) && conversation == nil {
-                            ProgressView("Загружаем переписку…")
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 36)
-                        } else if let conversation {
-                            if conversation.partial {
-                                Label("Показана доступная часть истории", systemImage: "clock.badge.exclamationmark")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            if !conversation.context.isEmpty {
-                                DisclosureGroup("Недавний контекст") {
-                                    Text(conversation.context).font(.callout.monospaced()).textSelection(.enabled)
-                                }
-                                .padding(16)
-                                .mobileGlassCard(radius: 18)
-                            }
-                            if conversation.messages.isEmpty && conversation.context.isEmpty {
-                                ContentUnavailableView("Сообщений пока нет", systemImage: "bubble.left", description: Text("Напишите первое сообщение, когда агент готов."))
+                            if model.loadingConversations.contains(session.id) && conversation == nil {
+                                ProgressView("Загружаем переписку…")
                                     .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 32)
+                                    .padding(.vertical, 36)
+                            } else if let conversation {
+                                if conversation.partial {
+                                    Label("Показана доступная часть истории", systemImage: "clock.badge.exclamationmark")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                if !conversation.context.isEmpty {
+                                    DisclosureGroup("Недавний контекст") {
+                                        Text(conversation.context).font(.callout.monospaced()).textSelection(.enabled)
+                                    }
+                                    .padding(16)
+                                    .mobileGlassCard(radius: 18)
+                                }
+                                if conversation.messages.isEmpty && conversation.context.isEmpty {
+                                    ContentUnavailableView("Сообщений пока нет", systemImage: "bubble.left", description: Text("Напишите первое сообщение, когда агент готов."))
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 32)
+                                }
+                                ForEach(conversation.messages) { message in
+                                    ChatBubble(message: message, agent: conversation.agent)
+                                }
+                                if conversation.busy {
+                                    Label("Агент пишет…", systemImage: "ellipsis.bubble")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
-                            ForEach(conversation.messages) { message in
-                                ChatBubble(message: message, agent: conversation.agent)
-                            }
-                            if conversation.busy {
-                                Label("Агент пишет…", systemImage: "ellipsis.bubble")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                            Color.clear.frame(height: 1).id(bottomAnchorID)
                         }
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 14)
+                        .frame(maxWidth: 720)
+                        .frame(maxWidth: .infinity)
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 14)
-                    .frame(maxWidth: 720)
-                    .frame(maxWidth: .infinity)
+                    .onChange(of: conversation?.messages.map(\.id) ?? [], initial: true) { _, messageIDs in
+                        positionAtLatestMessageIfNeeded(reader, messageIDs: messageIDs)
+                    }
                 }
                 composer
             }
@@ -452,6 +461,15 @@ struct ConversationView: View {
             }
         }
         .task(id: session.id) { model.loadConversation(sessionID: session.id) }
+    }
+
+    private func positionAtLatestMessageIfNeeded(_ reader: ScrollViewProxy, messageIDs: [String]) {
+        guard !positionedAtLatestMessage, !messageIDs.isEmpty else { return }
+        positionedAtLatestMessage = true
+        Task { @MainActor in
+            await Task.yield()
+            reader.scrollTo(bottomAnchorID, anchor: .bottom)
+        }
     }
 
     private var conversationHeader: some View {
