@@ -43,7 +43,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 920, height: 680), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.titlebarAppearsTransparent = true
         window.title = "Pingvi"; window.minSize = NSSize(width: 720, height: 540); window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(rootView: ContentView(store: store))
+        window.contentView = NSHostingView(rootView: ContentView(store: store, chatUpdatesEnabled: { [weak self] in
+            self?.canRefreshMainChat() == true
+        }))
         if !window.setFrameUsingName("AgentAttentionMain") { window.center() }
         window.setFrameAutosaveName("AgentAttentionMain")
         status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -57,7 +59,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             button.addSubview(area)
         }
         popover.contentSize = NSSize(width: 460, height: 700); popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: ContentView(store: store, compact: true, onClose: { [weak self] in self?.popover.performClose(nil) }))
+        popover.contentViewController = NSHostingController(rootView: ContentView(
+            store: store,
+            compact: true,
+            onClose: { [weak self] in self?.popover.performClose(nil) },
+            chatUpdatesEnabled: { [weak self] in self?.popover.isShown == true }
+        ))
         store.showSettings = { [weak self] in self?.showSettings() }
         store.onChange = { [weak self] in self?.refresh() }
         moodSubscription = IconAppearance.shared.$selected.receive(on: DispatchQueue.main).sink { [weak self] _ in self?.refresh() }
@@ -112,6 +119,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         popover.contentSize.height = min(700, max(420, (button.window?.screen?.visibleFrame.height ?? 770) - 70))
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
     }
+    func canRefreshMainChat() -> Bool {
+        ChatRefreshPolicy.allowsMainWindow(appIsActive: NSApp.isActive, window: window)
+    }
     func refreshTheme() {
         let appearance = AppTheme.saved().appearance
         if NSApp.appearance?.name != appearance?.name { NSApp.appearance = appearance }
@@ -144,7 +154,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 dockPanel = QuestionPanel(contentRect: NSRect(x: 0, y: 0, width: 460, height: 680), styleMask: [.nonactivatingPanel, .titled, .closable, .miniaturizable], backing: .buffered, defer: false)
                 dockPanel?.isReleasedWhenClosed = false
                 dockPanel?.title = "Pingvi · Сессии"; dockPanel?.level = .floating; dockPanel?.hidesOnDeactivate = false
-                dockPanel?.contentView = NSHostingView(rootView: ContentView(store: store, compact: true, onClose: { [weak self] in self?.dockPanel?.orderOut(nil) }))
+                dockPanel?.contentView = NSHostingView(rootView: ContentView(
+                    store: store,
+                    compact: true,
+                    onClose: { [weak self] in self?.dockPanel?.orderOut(nil) },
+                    chatUpdatesEnabled: { [weak self] in self?.dockPanel?.isVisible == true }
+                ))
                 dockPanel?.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             }
             if dockPanel?.isVisible != true, let screen = NSScreen.screens.first(where: { $0.frame.contains(point) }) {

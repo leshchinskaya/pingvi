@@ -25,7 +25,7 @@ ditto dist/Pingvi.app "$stage/Pingvi.app"
 ln -s /Applications "$stage/Applications"
 cp docs/PILOT.txt "$stage/Прочитайте перед запуском.txt"
 arch=$(uname -m)
-output="$PWD/dist/Pingvi-0.7.0-beta.9-$arch.dmg"
+output="$PWD/dist/Pingvi-0.7.0-beta.10-$arch.dmg"
 if [[ "$mode" != release ]]; then output="${output%.dmg}-$mode.dmg"; fi
 hdiutil create -volname Pingvi -srcfolder "$stage" -ov -format UDZO "$output"
 hdiutil verify "$output"

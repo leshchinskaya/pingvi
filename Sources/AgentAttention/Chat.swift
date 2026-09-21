@@ -1,13 +1,13 @@
 import SwiftUI
 import AppKit
 
-struct ChatMessage: Decodable, Identifiable {
+struct ChatMessage: Decodable, Identifiable, Equatable {
     var id: String
     var role: String
     var text: String
     var state: String
 }
-struct ChatHistory: Decodable {
+struct ChatHistory: Decodable, Equatable {
     var messages: [ChatMessage]
     var partial: Bool
     var context: String
@@ -19,6 +19,15 @@ struct ChatHistory: Decodable {
 }
 struct ChatReceipt: Decodable { var state: String; var error: String? }
 struct CreatedChat: Decodable { var session: Session }
+
+enum ChatRefreshPolicy {
+    static func allowsMainWindow(appIsActive: Bool, isVisible: Bool, occlusionState: NSWindow.OcclusionState) -> Bool {
+        appIsActive && isVisible && occlusionState.contains(.visible)
+    }
+    static func allowsMainWindow(appIsActive: Bool, window: NSWindow?) -> Bool {
+        window.map { allowsMainWindow(appIsActive: appIsActive, isVisible: $0.isVisible, occlusionState: $0.occlusionState) } ?? false
+    }
+}
 
 final class ChatPreferences: ObservableObject {
     static let shared = ChatPreferences()
@@ -72,10 +81,18 @@ final class ChatModel: ObservableObject {
     @Published var history: ChatHistory?
     @Published var error: String?
     @Published var sending = false
-    @Published var loading = false
+    private var loading = false
     static func payload(_ session: Session) -> [String: Any] {
         guard let data = try? JSONEncoder().encode(session), let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
         return value
+    }
+    func updateHistory(_ value: ChatHistory) {
+        guard history != value else { return }
+        history = value
+    }
+    func updateError(_ value: String?) {
+        guard error != value else { return }
+        error = value
     }
     func refresh(_ session: Session) async {
         guard !loading, UserDefaults.standard.bool(forKey: "chatEnabled") else { return }
@@ -84,8 +101,13 @@ final class ChatModel: ObservableObject {
             Bridge.call(["action": "chat-history", "session": Self.payload(session)]) { [weak self] result in
                 defer { self?.loading = false; continuation.resume() }
                 guard UserDefaults.standard.bool(forKey: "chatEnabled") else { return }
-                do { self?.history = try JSONDecoder().decode(ChatHistory.self, from: result.get()); self?.error = nil }
-                catch { self?.error = error.localizedDescription; self?.history?.canSend = false }
+                do {
+                    self?.updateHistory(try JSONDecoder().decode(ChatHistory.self, from: result.get()))
+                    self?.updateError(nil)
+                } catch {
+                    self?.updateError(error.localizedDescription)
+                    if self?.history?.canSend == true { self?.history?.canSend = false }
+                }
             }
         }
     }
@@ -130,9 +152,10 @@ final class ChatModel: ObservableObject {
 struct SessionDetailView: View {
     @ObservedObject var store: Store
     var session: Session
+    var chatUpdatesEnabled: () -> Bool = { true }
     @AppStorage("chatEnabled") private var enabled = false
     var body: some View {
-        if enabled { ChatView(store: store, session: session) }
+        if enabled { ChatView(store: store, session: session, updatesEnabled: chatUpdatesEnabled) }
         else { QuestionView(store: store, session: session) }
     }
 }
@@ -140,6 +163,7 @@ struct SessionDetailView: View {
 struct ChatView: View {
     @ObservedObject var store: Store
     let session: Session
+    let updatesEnabled: () -> Bool
     @StateObject private var model = ChatModel()
     @ObservedObject private var preferences = ChatPreferences.shared
     @State private var showRequest = false
@@ -252,7 +276,7 @@ struct ChatView: View {
             }.padding(12).surface(radius: 16)
         }.task(id: session.id + session.status + session.token) {
             while !Task.isCancelled {
-                await model.refresh(session)
+                if updatesEnabled() { await model.refresh(session) }
                 do { try await Task.sleep(for: .seconds(3)) } catch { break }
             }
         }.sheet(isPresented: $showRequest) {

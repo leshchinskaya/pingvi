@@ -25,6 +25,7 @@ struct ContentView: View {
     @ObservedObject private var iconAppearance = IconAppearance.shared
     var compact = false
     var onClose: (() -> Void)? = nil
+    var chatUpdatesEnabled: () -> Bool = { true }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var search = ""
     @State private var workspace = "all"
@@ -91,7 +92,7 @@ struct ContentView: View {
                         Spacer()
                         if store.pending.count > 1 { Button("Следующий вопрос") { store.nextQuestion() }.buttonStyle(.plain).foregroundStyle(Palette.accent) }
                     }.font(.caption.weight(.medium)).padding(.horizontal, 20).padding(.vertical, 12)
-                    SessionDetailView(store: store, session: session).id(session.id).padding(18).background(Palette.canvas)
+                    SessionDetailView(store: store, session: session, chatUpdatesEnabled: chatUpdatesEnabled).id(session.id).padding(18).background(Palette.canvas)
                 } else {
                     sidebar
                 }
@@ -99,7 +100,7 @@ struct ContentView: View {
                 HSplitView {
                     sidebar.frame(minWidth: 270, idealWidth: 300, maxWidth: 340)
                     VStack(alignment: .leading, spacing: 0) {
-                        if let session = store.current { SessionDetailView(store: store, session: session).id(session.id).padding(28) }
+                        if let session = store.current { SessionDetailView(store: store, session: session, chatUpdatesEnabled: chatUpdatesEnabled).id(session.id).padding(28) }
                         else { ContentUnavailableView("Ваши агенты — в одном месте", systemImage: "bubble.left.and.bubble.right", description: Text("Запускайте сессии как обычно. Когда агент задаст вопрос, он появится здесь.")) }
                     }.frame(minWidth: 350, maxWidth: .infinity, maxHeight: .infinity).background(Palette.canvas)
                 }
