@@ -17,6 +17,7 @@ final class HoverArea: NSView {
 final class QuestionPanel: NSPanel { override var canBecomeKey: Bool { true } }
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     let store = Store()
+    lazy var mobileLink = MacMobileLink(store: store)
     var window: NSWindow!
     var settingsWindow: NSWindow?
     var status: NSStatusItem!
@@ -66,13 +67,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             chatUpdatesEnabled: { [weak self] in self?.popover.isShown == true }
         ))
         store.showSettings = { [weak self] in self?.showSettings() }
-        store.onChange = { [weak self] in self?.refresh() }
+        store.onChange = { [weak self] in
+            self?.refresh()
+            self?.mobileLink.storeDidChange()
+        }
         moodSubscription = IconAppearance.shared.$selected.receive(on: DispatchQueue.main).sink { [weak self] _ in self?.refresh() }
         store.showDashboard = { [weak self] in self?.popover.performClose(nil); self?.dockPanel?.orderOut(nil); self?.showWindow() }
         store.showQuestion = { [weak self] id in self?.showPanel(id) }
         store.closeQuestion = { [weak self] in self?.panel?.orderOut(nil); self?.panelSession = nil; self?.popover.performClose(nil) }
         UNUserNotificationCenter.current().delegate = self
         if !Installation.needsMove() { MessageNotifications.delivery.requestPermission() }
+        mobileLink.start()
         refresh(); showWindow(); store.start()
         if CommandLine.arguments.contains("--show-settings") { showSettings() }
         if CommandLine.arguments.contains("--test-notification") {
@@ -105,7 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             w.titlebarAppearsTransparent = true
             w.title = "Настройки — Pingvi"; w.minSize = NSSize(width: 760, height: 540)
             w.isReleasedWhenClosed = false
-            w.contentView = NSHostingView(rootView: SettingsView(store: store))
+            w.contentView = NSHostingView(rootView: SettingsView(store: store, mobileLink: mobileLink))
             w.center(); w.setFrameAutosaveName("PingviSettings")
             settingsWindow = w
         }

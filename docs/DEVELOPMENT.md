@@ -18,6 +18,18 @@ bash tools/package-dmg.sh --local
 
 Первый скрипт создаёт `dist/Pingvi.app`, второй — тестовый DMG с суффиксом `-local` и SHA-256 рядом. Бинарники и кэш сборки не входят в Git. Распространяемый DMG собирается через `bash tools/package-dmg.sh --release` (это режим по умолчанию), после настройки Developer ID и notarization.
 
+### iOS и watchOS
+
+Мобильный Xcode-проект генерируется из проверяемого `Mobile/project.yml`:
+
+```sh
+xcodegen generate --spec Mobile/project.yml --project Mobile
+xcodebuild -project Mobile/PingviMobile.xcodeproj -scheme PingviMobile \
+  -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build
+```
+
+Для установки на личные устройства выберите одну Personal Team у targets `PingviMobile` и `PingviWatch`. Пошаговая инструкция и ограничения бесплатной подписи находятся в [`Mobile/README.md`](../Mobile/README.md).
+
 `tools/python-runtime.lock.json` фиксирует Python standalone, архитектуру, URL и SHA-256. Неверная контрольная сумма останавливает сборку. Тексты лицензий входят в приложение. Обновление runtime требует проверки контрольной суммы, переносимости, лицензий и тестов.
 
 ## Проверки
@@ -51,6 +63,8 @@ dist/Pingvi.app/Contents/MacOS/AgentAttention --preview-floating docs/media/floa
 Экспортирует настоящий интерфейс с вымышленными проектами без опроса пользовательских сессий. Не используйте рабочие диалоги в публичных скриншотах.
 
 `--preview-floating` показывает настоящий компонент плавающей карточки на нарисованном демонстрационном фоне редактора. Рабочий стол и окна пользователя не захватываются. После изменения кода сначала пересоберите приложение; для быстрого экспорта также можно использовать `swift run AgentAttention --preview-floating docs/media/floating-question-2026-09.png`.
+
+Мобильная debug-сборка поддерживает безопасный режим иллюстраций с вымышленными данными. После сборки и установки в iPhone Simulator запустите приложение с аргументами `--documentation-preview --documentation-screen SCREEN`, где `SCREEN` — `queue`, `dialogs`, `conversation` или `appearance`, затем сохраните кадр через `xcrun simctl io DEVICE screenshot PATH`. Этот режим компилируется только в Debug и не читает рабочие диалоги.
 
 ## Подпись и распространение
 

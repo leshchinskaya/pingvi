@@ -529,6 +529,7 @@ private struct SettingsSectionIcon: View {
 
 struct SettingsView: View {
     @ObservedObject var store: Store
+    @ObservedObject var mobileLink: MacMobileLink
     var preview = false
     @ObservedObject private var appearance = IconAppearance.shared
     @State private var page: SettingsPage? = UserDefaults.standard.bool(forKey: "setupComplete") ? .general : .connections
@@ -541,7 +542,15 @@ struct SettingsView: View {
     @AppStorage("floating") private var floating = false
     @AppStorage("terminal") private var terminal = false
     @AppStorage("chatEnabled") private var chatEnabled = false
+    @AppStorage("launchAtLogin") private var launchAtLogin = false
     @AppStorage("appTheme") private var theme = AppTheme.system.rawValue
+    @State private var confirmForgetPhone = false
+
+    init(store: Store, mobileLink: MacMobileLink? = nil, preview: Bool = false) {
+        self.store = store
+        self.mobileLink = mobileLink ?? MacMobileLink(store: store, preview: true)
+        self.preview = preview
+    }
     var matchingPages: [SettingsPage] {
         SettingsPage.allCases.filter { search.isEmpty || ($0.rawValue + keywords($0)).localizedCaseInsensitiveContains(search) }
     }
@@ -595,7 +604,7 @@ struct SettingsView: View {
                         }
                         Section("Иконка") { MoodPickerView() }
                     case .notifications: notifications
-                    case .connections: ConnectionsView(store: store)
+                    case .connections: connections
                     case .data: DataSettings(store: store)
                     case .exclusions: exclusions
                     }
@@ -612,6 +621,14 @@ struct SettingsView: View {
             .onChange(of: menubar) { _, _ in store.onChange?() }
             .onChange(of: terminal) { _, _ in store.poll() }
             .onChange(of: theme) { _, _ in store.onChange?() }
+            .onChange(of: launchAtLogin) { _, enabled in
+                guard !preview else { return }
+                do { try MacMobileLink.setLaunchAtLogin(enabled) }
+                catch {
+                    launchAtLogin.toggle()
+                    store.message = "Автозапуск: \(error.localizedDescription)"
+                }
+            }
             .onAppear { if !preview { refreshAuthorization() } }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                 if !preview { refreshAuthorization() }
@@ -625,6 +642,7 @@ struct SettingsView: View {
             Section {
                 Toggle("Показывать в Dock", isOn: $dock).disabled(!menubar)
                 Toggle("Показывать в строке меню", isOn: $menubar).disabled(!dock)
+                Toggle("Запускать Pingvi при входе", isOn: $launchAtLogin)
             } header: { Text("Быстрый доступ") } footer: { Text("Оставьте хотя бы один способ открыть Pingvi.") }
             Section {
                 LabeledContent("Список при наведении на Dock") {
@@ -681,6 +699,52 @@ struct SettingsView: View {
     }
     var connections: some View {
         Group {
+            Section {
+                LabeledContent("Состояние", value: mobileLink.state.description)
+                if let device = mobileLink.pairedDevice {
+                    LabeledContent("iPhone", value: device.peerName)
+                    LabeledContent("Сопряжён") {
+                        Text(device.createdAt, style: .date)
+                    }
+                    LabeledContent("Отпечаток", value: device.fingerprint)
+                    Button("Отвязать iPhone…", role: .destructive) { confirmForgetPhone = true }
+                        .alert("Отвязать iPhone?", isPresented: $confirmForgetPhone) {
+                            Button("Отвязать", role: .destructive) { mobileLink.forgetDevice() }
+                            Button("Отмена", role: .cancel) {}
+                        } message: {
+                            Text("Для повторного подключения потребуется новый QR-код.")
+                        }
+                } else if let offer = mobileLink.pairingOffer {
+                    if let image = mobileLink.qrImage() {
+                        HStack {
+                            Spacer()
+                            Image(nsImage: image)
+                                .interpolation(.none)
+                                .resizable()
+                                .frame(width: 240, height: 240)
+                                .accessibilityLabel("QR-код для подключения iPhone")
+                            Spacer()
+                        }
+                    }
+                    Text("Откройте Pingvi на iPhone и отсканируйте код. Код действует до \(offer.expiresAt.formatted(date: .omitted, time: .shortened)).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    HStack {
+                        Button("Создать новый код") { mobileLink.beginPairing() }
+                        Button("Отмена") { mobileLink.cancelPairing() }
+                    }
+                } else {
+                    Button("Подключить iPhone…") { mobileLink.beginPairing() }
+                    Text("Устройства должны находиться в одной локальной подсети. Содержимое вопросов не покидает её.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if let error = mobileLink.lastError {
+                    Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                }
+            } header: { Text("iPhone и Apple Watch") } footer: {
+                Text("При бесплатной Personal Team мобильные приложения потребуется переустанавливать каждые 7 дней. Фоновая LAN-доставка не гарантируется iOS.")
+            }
             Section("herdr") { LabeledContent("Подключение", value: "Автоматически"); Text("Сессии Claude и Codex появляются после запуска в herdr.").foregroundStyle(.secondary) }
             Section {
                 LabeledContent("Claude Code") { Button("Подключить…") { store.installHooks() } }

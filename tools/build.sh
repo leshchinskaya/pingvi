@@ -35,6 +35,8 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSAppleEventsUsageDescription</key><string>Чтение вопросов агентов и открытие нужной вкладки Terminal.</string>
+<key>NSLocalNetworkUsageDescription</key><string>Pingvi передаёт вопросы и ответы напрямую вашим личным устройствам в локальной сети.</string>
+<key>NSBonjourServices</key><array><string>_pingvi._tcp</string></array>
 </dict></plist>
 PLIST
 python3 tools/embed-python.py "$app"

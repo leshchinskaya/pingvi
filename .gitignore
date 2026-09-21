@@ -1,6 +1,9 @@
 # Generated files and local state
 .build/
+.swiftpm/
 dist/
+xcuserdata/
+*.xcuserstate
 __pycache__/
 *.py[cod]
 .DS_Store

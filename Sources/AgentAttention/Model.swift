@@ -361,16 +361,33 @@ final class Store: ObservableObject {
         if local.answeredContext == nil { local.answeredContext = [:] }
         local.answeredContext?[s.id] = s.detail.isEmpty ? s.question : s.detail
     }
-    func reply(_ s: Session, answer: String = "") {
-        guard s.canReply, !submitting.contains(s.id), sent[s.id] != s.token else { return }
+    func reply(
+        _ s: Session,
+        answer: String = "",
+        fieldAnswers: [String: String]? = nil,
+        completion: ((Result<Void, Error>) -> Void)? = nil
+    ) {
+        guard s.canReply, !submitting.contains(s.id), sent[s.id] != s.token else {
+            completion?(.failure(NSError(
+                domain: "PingviReply",
+                code: 409,
+                userInfo: [NSLocalizedDescriptionKey: "Вопрос уже отправляется или больше не принимает ответы."]
+            )))
+            return
+        }
+        let submittedAnswers = fieldAnswers ?? answers(s)
         do {
             try AttachmentReference.validate(in: answer)
-            for value in answers(s).values { try AttachmentReference.validate(in: value) }
-        } catch { message = error.localizedDescription; return }
+            for value in submittedAnswers.values { try AttachmentReference.validate(in: value) }
+        } catch { message = error.localizedDescription; completion?(.failure(error)); return }
         let shouldAdvance = selected == s.id
-        guard let data = try? JSONEncoder().encode(s), let obj = try? JSONSerialization.jsonObject(with: data) else { return }
+        guard let data = try? JSONEncoder().encode(s), let obj = try? JSONSerialization.jsonObject(with: data) else {
+            let error = NSError(domain: "PingviReply", code: 1, userInfo: [NSLocalizedDescriptionKey: "Не удалось подготовить ответ."])
+            completion?(.failure(error))
+            return
+        }
         submitting.insert(s.id)
-        Bridge.call(["action": "reply", "session": obj, "answer": answer, "answers": answers(s)]) { [weak self] result in
+        Bridge.call(["action": "reply", "session": obj, "answer": answer, "answers": submittedAnswers]) { [weak self] result in
             guard let self else { return }; self.submitting.remove(s.id)
             switch result {
             case .success:
@@ -381,7 +398,7 @@ final class Store: ObservableObject {
                 if self.local.deliveryStarted == nil { self.local.deliveryStarted = [:] }
                 self.local.deliveryStarted?[s.id] = Date().timeIntervalSince1970
                 if let i = self.local.sessions.firstIndex(where: { $0.id == s.id }) { self.local.sessions[i].status = "checking"; self.local.sessions[i].canReply = false }
-                self.save(); self.poll()
+                self.save(); completion?(.success(())); self.poll()
             case .failure(let error):
                 // A missing helper result cannot prove that no input reached the agent.
                 if (error as NSError).domain == "Bridge", [2, 408].contains((error as NSError).code) {
@@ -393,7 +410,7 @@ final class Store: ObservableObject {
                     }
                     self.save()
                 }
-                self.message = error.localizedDescription; self.poll()
+                self.message = error.localizedDescription; completion?(.failure(error)); self.poll()
             }
         }
     }
