@@ -8,6 +8,20 @@ private struct StoredMobileIdentity: Codable {
     let privateKey: Data
 }
 
+enum MobileReplyBuilder {
+    static func normalized(_ reply: PingviReply, for question: PingviQuestion) -> PingviReply {
+        guard question.options.isEmpty,
+              question.fields.contains(where: { $0.id == "text" && $0.options.isEmpty }),
+              reply.fieldAnswers["text", default: ""].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !reply.answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return reply
+        }
+        var fields = reply.fieldAnswers
+        fields["text"] = reply.answer.trimmingCharacters(in: .whitespacesAndNewlines)
+        return PingviReply(sessionID: reply.sessionID, questionToken: reply.questionToken, answer: "", fieldAnswers: fields)
+    }
+}
+
 @MainActor
 final class MobileAppModel: ObservableObject {
     static let shared = MobileAppModel()
@@ -106,11 +120,11 @@ final class MobileAppModel: ObservableObject {
             errorMessage = "Ответ можно отправить только при активном соединении с Mac."
             return "Mac недоступен"
         }
-        guard snapshot.questions.contains(where: { $0.id == reply.sessionID && $0.token == reply.questionToken && $0.canReply }) else {
+        guard let question = snapshot.questions.first(where: { $0.id == reply.sessionID && $0.token == reply.questionToken && $0.canReply }) else {
             errorMessage = "Вопрос уже изменился или больше не принимает ответы."
             return "Вопрос устарел"
         }
-        let commandID = client.sendReply(reply)
+        let commandID = client.sendReply(MobileReplyBuilder.normalized(reply, for: question))
         replySessionsByCommand[commandID] = reply.sessionID
         replyingSessions.insert(reply.sessionID)
         commandResults[commandID] = PingviReplyResult(commandID: commandID, status: .checking, message: "Отправляем…")

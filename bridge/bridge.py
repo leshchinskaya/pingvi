@@ -379,7 +379,11 @@ def reply(data):
         raise RuntimeError('Экран изменился. Обновите вопрос перед ответом.')
     answer = data.get('answer', '')
     if parsed['fields']:
-        answer = data.get('answers', {}).get('text', '').strip()
+        text_answer = data.get('answers', {}).get('text', '')
+        if not text_answer.strip() and len(parsed['fields']) == 1 and parsed['fields'][0]['id'] == 'text':
+            # Older iOS clients put the short reply in `answer`, not `answers.text`.
+            text_answer = answer
+        answer = text_answer.strip()
         if not answer or len(answer) > 4000 or any(ord(c) < 32 and c not in '\n\t' for c in answer) or '\x7f' in answer:
             raise RuntimeError('Введите ответ до 4000 символов, без управляющих символов.')
     elif answer not in [o['id'] for o in parsed['options']]:

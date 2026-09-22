@@ -10,6 +10,7 @@
 		4BB072B7CB8D5AFB6FA47BED /* PingviWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 805647583CE1CBD8D2F23CD2 /* PingviWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		56DD70197CEF415DC5104575 /* MobileViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A65106DAB10C082DA6DA090 /* MobileViews.swift */; };
 		621F092159AA2591F7101ADC /* MobileAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CD9C1AE355790AD1BEC0F7E /* MobileAppearance.swift */; };
+		70D17D799A49B3A7A4D03963 /* MobileReplyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB42B1E76C1CD051EBE7B3D7 /* MobileReplyTests.swift */; };
 		797F1C606E2765FB29016100 /* MobileDocumentationPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC40A1FF5F3E1BE307B9AEE4 /* MobileDocumentationPreview.swift */; };
 		7E34B0BD7E87B470341B839A /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = D35121EF6D7DCC5DCC09DCF0 /* Localizable.xcstrings */; };
 		8FA18ECB72EB976DC7AD779C /* WatchViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D2C6DD92339336FCD383092 /* WatchViews.swift */; };
@@ -91,6 +92,7 @@
 		CF392AC29F3485FCD2206BBD /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D35121EF6D7DCC5DCC09DCF0 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		F26A97CBE46D07D2315DF3B0 /* WatchStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchStore.swift; sourceTree = "<group>"; };
+		FB42B1E76C1CD051EBE7B3D7 /* MobileReplyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileReplyTests.swift; sourceTree = "<group>"; };
 		FDDB520502B69E194CEC42AB /* PingviMobileUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PingviMobileUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -188,6 +190,7 @@
 			isa = PBXGroup;
 			children = (
 				A29B9742A6016EDBDAD94FE3 /* MobileAppearanceTests.swift */,
+				FB42B1E76C1CD051EBE7B3D7 /* MobileReplyTests.swift */,
 			);
 			path = iOSTests;
 			sourceTree = "<group>";
@@ -378,6 +381,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B2B141E9BC43C537966D1FBD /* MobileAppearanceTests.swift in Sources */,
+				70D17D799A49B3A7A4D03963 /* MobileReplyTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

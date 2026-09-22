@@ -95,6 +95,17 @@ class ParserTests(unittest.TestCase):
                 self.assertEqual(submitted, ['Второй вариант\nС пояснением'])
                 self.assertEqual(draft[0], '')
 
+    def test_ios_short_reply_submits_text_question(self):
+        screen = '• Как назвать экран?\n› Ask Codex to do anything\n  gpt-6 medium · ~'
+        session = bridge.base_session('x', 'x', '', 'codex', 'herdr')
+        session.update(bridge.parse_screen(screen, 'codex'))
+        session['target'] = {'pane': 'test'}
+        with patch.object(bridge, 'herdr_json', return_value={'pane': {'agent': 'codex'}}), \
+             patch.object(bridge, 'run', return_value=screen) as run, \
+             patch.object(bridge.time, 'sleep'):
+            bridge.reply({'session': session, 'answer': 'Главный экран', 'answers': {}})
+        self.assertEqual(run.call_count, 3)
+
     def test_only_live_approval(self):
         self.assertTrue(bridge.parse_screen(APPROVAL, 'codex')['canReply'])
         self.assertFalse(bridge.parse_screen('Here is a plan:\n1. Yes\n2. No', 'codex')['canReply'])

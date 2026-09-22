@@ -668,13 +668,15 @@ struct QuestionView: View {
                 }
             }
             ForEach(question.fields) { field in
-                Section(field.label) {
-                    Picker("Ответ", selection: Binding(
-                        get: { fieldAnswers[field.id] ?? "" },
-                        set: { fieldAnswers[field.id] = $0 }
-                    )) {
-                        Text("Не выбрано").tag("")
-                        ForEach(field.options) { option in Text(option.label).tag(option.label) }
+                if !field.options.isEmpty {
+                    Section(field.label) {
+                        Picker("Ответ", selection: Binding(
+                            get: { fieldAnswers[field.id] ?? "" },
+                            set: { fieldAnswers[field.id] = $0 }
+                        )) {
+                            Text("Не выбрано").tag("")
+                            ForEach(field.options) { option in Text(option.label).tag(option.label) }
+                        }
                     }
                 }
             }
