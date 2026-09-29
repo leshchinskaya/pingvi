@@ -3,6 +3,31 @@ import XCTest
 @testable import Pingvi
 
 final class MobileReplyTests: XCTestCase {
+    func testViewedConversationUpdatesSessionAndRemovesCompletion() {
+        let session = PingviSessionSummary(
+            id: "done", title: "Result", project: "Project", projectPath: "/Project",
+            agent: "codex", source: "herdr", status: "done", preview: "Unread", updatedAt: Date()
+        )
+        let snapshot = PingviSnapshot(
+            revision: 7,
+            questions: [],
+            completions: [PingviCompletion(id: session.id, title: session.title, agent: session.agent, source: session.source, summary: session.preview, completedAt: Date())],
+            sessions: [session]
+        )
+        let conversation = PingviConversation(
+            sessionID: session.id, title: session.title, project: session.project, agent: session.agent,
+            source: session.source, status: "viewed", messages: [], partial: false, context: "",
+            canSend: true, busy: false, reason: "", token: "token", pending: false
+        )
+
+        let updated = MobileSnapshotUpdater.recording(conversation, in: snapshot)
+
+        XCTAssertEqual(updated.sessions.first?.status, "viewed")
+        XCTAssertEqual(updated.sessions.first?.preview, "Результат просмотрен")
+        XCTAssertTrue(updated.completions.isEmpty)
+        XCTAssertEqual(updated.revision, snapshot.revision)
+    }
+
     func testShortAnswerUsesTextFieldForCodexQuestion() {
         let question = PingviQuestion(
             id: "question", token: "token", title: "Question", project: "Project",

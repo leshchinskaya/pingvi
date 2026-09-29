@@ -1,6 +1,17 @@
 import XCTest
 
 final class MobileConversationScrollTests: XCTestCase {
+    func testUnreadDialogOffersMarkAsReadAction() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--documentation-preview",
+            "--documentation-screen", "dialogs"
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.buttons["Отметить «Уведомления на устройствах» прочитанным"].waitForExistence(timeout: 3))
+    }
+
     func testOpeningLongConversationShowsLatestMessageWithoutUserScroll() {
         let app = XCUIApplication()
         app.launchArguments = [

@@ -22,6 +22,36 @@ enum MobileReplyBuilder {
     }
 }
 
+enum MobileSnapshotUpdater {
+    static func recording(_ conversation: PingviConversation, in snapshot: PingviSnapshot) -> PingviSnapshot {
+        let sessions = snapshot.sessions.map { session in
+            guard session.id == conversation.sessionID, session.status != conversation.status else { return session }
+            return PingviSessionSummary(
+                id: session.id,
+                title: session.title,
+                project: session.project,
+                projectPath: session.projectPath,
+                agent: session.agent,
+                source: session.source,
+                status: conversation.status,
+                preview: conversation.status == "viewed" ? "Результат просмотрен" : session.preview,
+                updatedAt: session.updatedAt
+            )
+        }
+        let completions = conversation.status == "viewed"
+            ? snapshot.completions.filter { $0.id != conversation.sessionID }
+            : snapshot.completions
+        return PingviSnapshot(
+            revision: snapshot.revision,
+            generatedAt: snapshot.generatedAt,
+            questions: snapshot.questions,
+            completions: completions,
+            sessions: sessions,
+            projects: snapshot.projects
+        )
+    }
+}
+
 @MainActor
 final class MobileAppModel: ObservableObject {
     static let shared = MobileAppModel()
@@ -34,6 +64,7 @@ final class MobileAppModel: ObservableObject {
     @Published private(set) var conversations: [String: PingviConversation] = [:]
     @Published private(set) var loadingConversations: Set<String> = []
     @Published private(set) var sendingChats: Set<String> = []
+    @Published private(set) var markingReadSessions: Set<String> = []
     @Published private(set) var creatingChat = false
     @Published var createdSessionID: String?
     @Published var errorMessage: String?
@@ -141,6 +172,7 @@ final class MobileAppModel: ObservableObject {
         conversations = [:]
         loadingConversations = []
         sendingChats = []
+        markingReadSessions = []
         try? keychain.remove("paired-mac")
         try? FileManager.default.removeItem(at: cacheURL)
         watch.update(snapshot: snapshot, connection: .stopped)
@@ -154,6 +186,17 @@ final class MobileAppModel: ObservableObject {
         guard force || (conversations[sessionID] == nil && !loadingConversations.contains(sessionID)) else { return }
         loadingConversations.insert(sessionID)
         _ = client.requestConversation(sessionID: sessionID)
+    }
+
+    func markConversationRead(sessionID: String) {
+        guard state == .connected else {
+            errorMessage = "Диалог можно отметить прочитанным только при активном соединении с Mac."
+            return
+        }
+        guard snapshot.sessions.contains(where: { $0.id == sessionID && $0.status == "done" }),
+              !markingReadSessions.contains(sessionID) else { return }
+        markingReadSessions.insert(sessionID)
+        loadConversation(sessionID: sessionID, force: true)
     }
 
     func sendChat(sessionID: String, text: String) {
@@ -256,8 +299,12 @@ final class MobileAppModel: ObservableObject {
         case .conversation:
             guard let response = message.conversationResponse else { return }
             loadingConversations.remove(response.sessionID)
+            markingReadSessions.remove(response.sessionID)
             if let conversation = response.conversation {
                 conversations[response.sessionID] = conversation
+                snapshot = MobileSnapshotUpdater.recording(conversation, in: snapshot)
+                persist(snapshot)
+                watch.update(snapshot: snapshot, connection: state)
             } else if let error = response.error {
                 errorMessage = error
             }

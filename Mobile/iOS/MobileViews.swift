@@ -182,28 +182,32 @@ struct QueueView: View {
                                 .padding(.top, 6)
                             ForEach(model.snapshot.completions) { item in
                                 if let session = model.snapshot.sessions.first(where: { $0.id == item.id }) {
-                                    NavigationLink {
-                                        ConversationView(session: session)
-                                    } label: {
-                                        HStack(spacing: 14) {
-                                            Image(systemName: "checkmark.bubble.fill")
-                                                .font(.title2)
-                                                .foregroundStyle(.green)
-                                            VStack(alignment: .leading, spacing: 4) {
-                                                Text(item.title).font(.headline)
-                                                Text("Открыть готовый результат")
-                                                    .font(.caption)
-                                                    .foregroundStyle(.secondary)
+                                    HStack(spacing: 10) {
+                                        NavigationLink {
+                                            ConversationView(session: session)
+                                        } label: {
+                                            HStack(spacing: 14) {
+                                                Image(systemName: "checkmark.bubble.fill")
+                                                    .font(.title2)
+                                                    .foregroundStyle(.green)
+                                                VStack(alignment: .leading, spacing: 4) {
+                                                    Text(item.title).font(.headline)
+                                                    Text("Открыть готовый результат")
+                                                        .font(.caption)
+                                                        .foregroundStyle(.secondary)
+                                                }
+                                                Spacer()
+                                                Image(systemName: "chevron.right")
+                                                    .font(.caption.bold())
+                                                    .foregroundStyle(.tertiary)
                                             }
-                                            Spacer()
-                                            Image(systemName: "chevron.right")
-                                                .font(.caption.bold())
-                                                .foregroundStyle(.tertiary)
+                                            .padding(18)
+                                            .mobileGlassCard(radius: 20)
                                         }
-                                        .padding(18)
-                                        .mobileGlassCard(radius: 20)
+                                        .buttonStyle(.plain)
+                                        .frame(maxWidth: .infinity)
+                                        MarkConversationReadButton(session: session)
                                     }
-                                    .buttonStyle(.plain)
                                 }
                             }
                         }
@@ -277,12 +281,18 @@ struct DialogsView: View {
                     ScrollView {
                         LazyVStack(spacing: 12) {
                             ForEach(filtered) { session in
-                                NavigationLink {
-                                    ConversationView(session: session)
-                                } label: {
-                                    SessionCard(session: session)
+                                HStack(spacing: 10) {
+                                    NavigationLink {
+                                        ConversationView(session: session)
+                                    } label: {
+                                        SessionCard(session: session)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .frame(maxWidth: .infinity)
+                                    if session.status == "done" {
+                                        MarkConversationReadButton(session: session)
+                                    }
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
                         .padding(.horizontal, 18)
@@ -304,6 +314,23 @@ struct DialogsView: View {
             }
             .sheet(isPresented: $showNewChat) { NewMobileChatView() }
         }
+    }
+}
+
+private struct MarkConversationReadButton: View {
+    @EnvironmentObject private var model: MobileAppModel
+    let session: PingviSessionSummary
+
+    var body: some View {
+        Button { model.markConversationRead(sessionID: session.id) } label: {
+            Image(systemName: model.markingReadSessions.contains(session.id) ? "ellipsis" : "checkmark")
+                .font(.headline.bold())
+                .frame(width: 44, height: 44)
+                .background(.thinMaterial, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(model.state != .connected || model.markingReadSessions.contains(session.id))
+        .accessibilityLabel("Отметить «\(session.title)» прочитанным")
     }
 }
 
@@ -452,6 +479,15 @@ struct ConversationView: View {
         .navigationTitle(currentSession.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if currentSession.status == "done" {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { model.markConversationRead(sessionID: session.id) } label: {
+                        Image(systemName: "checkmark.circle")
+                    }
+                    .disabled(model.state != .connected || model.markingReadSessions.contains(session.id))
+                    .accessibilityLabel("Отметить диалог прочитанным")
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button { model.loadConversation(sessionID: session.id, force: true) } label: {
                     Image(systemName: "arrow.clockwise")
