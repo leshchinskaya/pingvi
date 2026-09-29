@@ -35,6 +35,12 @@ enum MobileReplyBuilder {
 }
 
 enum MobileSnapshotUpdater {
+    /// Revisions only order snapshots within one Mac session. The first snapshot after a
+    /// (re)connection is always taken, because a restarted Mac may count from a lower number.
+    static func shouldAccept(incoming: UInt64, current: UInt64, firstAfterConnect: Bool) -> Bool {
+        firstAfterConnect || incoming >= current
+    }
+
     static func recording(_ conversation: PingviConversation, in snapshot: PingviSnapshot) -> PingviSnapshot {
         let sessions = snapshot.sessions.map { session in
             guard session.id == conversation.sessionID, session.status != conversation.status else { return session }
@@ -99,6 +105,7 @@ final class MobileAppModel: ObservableObject {
     private let cacheURL: URL
     private let logger = Logger(subsystem: "app.pingvi.mobile", category: "Link")
     private var replySessionsByCommand: [String: String] = [:]
+    private var awaitingFirstSnapshot = true
     private var repliesByCommand: [String: PingviReply] = [:]
     private var chatTextsBySession: [String: String] = [:]
     private static let lastSyncKey = "lastSnapshotAt"
@@ -415,6 +422,7 @@ final class MobileAppModel: ObservableObject {
             Task { @MainActor in
                 self?.logger.info("State: \(state.description, privacy: .public)")
                 guard let self else { return }
+                if state != .connected { self.awaitingFirstSnapshot = true }
                 self.state = state
                 if self.pairingInProgress, self.pairing == nil, case .disconnected(let reason) = state {
                     self.pairingInProgress = false
@@ -445,7 +453,12 @@ final class MobileAppModel: ObservableObject {
     private func receive(_ message: PingviMessage) {
         switch message.kind {
         case .snapshot:
-            guard let incoming = message.snapshot, incoming.revision >= snapshot.revision else { return }
+            guard let incoming = message.snapshot,
+                  MobileSnapshotUpdater.shouldAccept(incoming: incoming.revision, current: snapshot.revision, firstAfterConnect: awaitingFirstSnapshot) else {
+                logger.info("Dropped stale snapshot \(message.snapshot?.revision ?? 0, privacy: .public) < \(self.snapshot.revision, privacy: .public)")
+                return
+            }
+            awaitingFirstSnapshot = false
             let oldTokens = Set(snapshot.questions.map(\.token))
             let oldCompletions = Set(snapshot.completions.map(\.id))
             snapshot = incoming

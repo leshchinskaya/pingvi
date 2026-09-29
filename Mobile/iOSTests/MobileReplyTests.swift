@@ -95,4 +95,10 @@ final class MobileReplyTests: XCTestCase {
         XCTAssertFalse(MobileReplyBuilder.supportsQuickReply(question(options: 2, canReply: false)))
         XCTAssertFalse(MobileReplyBuilder.supportsQuickReply(question(options: 2, state: .checking)))
     }
+
+    func testSnapshotFromRestartedMacIsAcceptedAfterReconnect() {
+        XCTAssertTrue(MobileSnapshotUpdater.shouldAccept(incoming: 5, current: 214_364, firstAfterConnect: true))
+        XCTAssertFalse(MobileSnapshotUpdater.shouldAccept(incoming: 5, current: 214_364, firstAfterConnect: false))
+        XCTAssertTrue(MobileSnapshotUpdater.shouldAccept(incoming: 10, current: 10, firstAfterConnect: false))
+    }
 }

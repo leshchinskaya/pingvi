@@ -52,7 +52,9 @@ final class MacMobileLink: ObservableObject, @unchecked Sendable {
     private let store: Store
     private let keychain: PingviKeychain
     private let server: PingviLinkServer?
-    private var revision: UInt64 = 0
+    /// Seeded from the clock so revisions keep growing across Mac restarts; phones drop
+    /// snapshots whose revision is lower than the one they already have.
+    private var revision = UInt64(Date().timeIntervalSince1970 * 1_000)
     private var pending: [String: PendingMobileReply] = [:]
     private var completionSummaries: [String: String] = [:]
     private var loadingSummaries: Set<String> = []
