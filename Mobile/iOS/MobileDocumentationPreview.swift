@@ -8,6 +8,7 @@ enum MobileDocumentationPreview {
         case dialogs
         case conversation
         case appearance
+        case settings
     }
 
     static let conversationSessionID = "demo-completed"
@@ -50,7 +51,7 @@ enum MobileDocumentationPreview {
         switch screen {
         case .queue, .conversation: return .queue
         case .dialogs: return .dialogs
-        case .appearance: return .settings
+        case .appearance, .settings: return .settings
         }
     }
 

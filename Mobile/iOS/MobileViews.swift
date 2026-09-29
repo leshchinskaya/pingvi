@@ -46,7 +46,7 @@ private struct PairedRootView: View {
                 .tabItem { Label("Диалоги", systemImage: "bubble.left.and.bubble.right") }
                 .badge(model.unreadResultCount)
                 .tag(MobileTab.dialogs)
-            NavigationStack { MobileSettingsView() }
+            NavigationStack(path: $router.settingsPath) { MobileSettingsView() }
                 .tabItem { Label("Настройки", systemImage: "gearshape") }
                 .tag(MobileTab.settings)
         }
@@ -1343,7 +1343,7 @@ struct MobileSettingsView: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("appTheme") private var theme = MobileTheme.system.rawValue
     @AppStorage("fullNotificationPreviews") private var fullPreviews = false
-    @State private var showAppearance = false
+    @State private var confirmForget = false
 
     private var themeTitle: String { (MobileTheme(rawValue: theme) ?? .system).title }
 
@@ -1357,25 +1357,37 @@ struct MobileSettingsView: View {
         Form {
             Section {
                 LabeledContent("Mac", value: model.pairing?.peerName ?? String(localized: "Не подключён"))
-                LabeledContent("Состояние") {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(model.state == .connected ? Color.green : Color.orange)
-                            .frame(width: 8, height: 8)
-                            .accessibilityHidden(true)
-                        Text(model.state.description)
+                TimelineView(.everyMinute) { context in
+                    LabeledContent {
+                        VStack(alignment: .trailing, spacing: 2) {
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(model.state == .connected ? Color.green : Color.orange)
+                                    .frame(width: 8, height: 8)
+                                    .accessibilityHidden(true)
+                                Text(model.state.description)
+                            }
+                            if let updated = MobileSyncText.updated(model.lastSyncAt, now: context.date) {
+                                Text(updated).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    } label: {
+                        Text("Состояние")
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+                if let fingerprint = model.pairing?.fingerprint {
+                    LabeledContent("Отпечаток") {
+                        Text(fingerprint)
+                            .font(.callout.monospaced())
+                            .textSelection(.enabled)
                     }
                 }
-                TimelineView(.everyMinute) { context in
-                    LabeledContent("Данные", value: MobileSyncText.updated(model.lastSyncAt, now: context.date) ?? String(localized: "ещё не получены"))
-                }
-                if model.state != .connected {
-                    Button("Переподключить") { model.reconnect() }
-                        .disabled(model.state == .searching || model.state == .connecting)
-                }
-                NavigationLink("Подробнее") { MobileConnectionDetailsView() }
+                Button("Забыть Mac…", role: .destructive) { confirmForget = true }
             } header: {
                 Text("Подключение").accessibilityAddTraits(.isHeader)
+            } footer: {
+                Text("Отпечаток должен совпадать с показанным на Mac в Настройках → Подключения.")
             }
 
             Section {
@@ -1396,13 +1408,24 @@ struct MobileSettingsView: View {
             }
 
             Section {
-                Button { showAppearance = true } label: {
-                    HStack {
-                        LabeledContent("Оформление", value: "\(appearance.selectedIcon.title) · \(themeTitle)")
-                        Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.tertiary)
+                NavigationLink(value: MobileSettingsDestination.appearance) {
+                    HStack(spacing: 12) {
+                        Image(appearance.selectedIcon.previewName)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 30, height: 30)
+                            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            .accessibilityHidden(true)
+                        Text("Оформление")
+                        Spacer()
+                        Text("\(appearance.selectedIcon.title) · \(themeTitle)")
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
-                    .foregroundStyle(.primary)
                 }
+                .accessibilityValue("\(appearance.selectedIcon.title), \(themeTitle)")
+            } footer: {
+                Text("Тема интерфейса и иконка приложения.")
             }
 
             Section {
@@ -1414,57 +1437,31 @@ struct MobileSettingsView: View {
             } header: {
                 Text("О приложении")
             } footer: {
-                #if DEBUG
-                Text("Тексты вопросов, ответы и ключи в диагностику не включаются. Без Apple Developer Program приложение нужно переустанавливать через Xcode каждые 7 дней; фоновая доставка в локальной сети не гарантируется.")
-                #else
                 Text("Тексты вопросов, ответы и ключи в диагностику не включаются.")
-                #endif
             }
+
+            #if DEBUG
+            Section {
+                Label("Без Apple Developer Program приложение нужно переустанавливать через Xcode каждые 7 дней. Фоновая доставка в локальной сети не гарантируется.", systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            #endif
         }
         .scrollContentBackground(.hidden)
         .background { MobileAmbientBackground() }
         .mobileConnectionBanner()
         .navigationTitle("Настройки")
         .toolbar(.hidden, for: .navigationBar)
-        .navigationDestination(isPresented: $showAppearance) { MobileAppearanceSettingsView() }
-        .onAppear {
-            model.refreshNotificationAuthorization()
-            #if DEBUG
-            if MobileDocumentationPreview.isEnabled && MobileDocumentationPreview.screen == .appearance { showAppearance = true }
-            #endif
+        .navigationDestination(for: MobileSettingsDestination.self) { destination in
+            switch destination {
+            case .appearance: MobileAppearanceSettingsView()
+            }
         }
+        .onAppear { model.refreshNotificationAuthorization() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { model.refreshNotificationAuthorization() }
         }
-    }
-}
-
-private struct MobileConnectionDetailsView: View {
-    @EnvironmentObject private var model: MobileAppModel
-    @State private var confirmForget = false
-
-    var body: some View {
-        Form {
-            Section {
-                LabeledContent("Mac", value: model.pairing?.peerName ?? String(localized: "Не подключён"))
-                if let fingerprint = model.pairing?.fingerprint {
-                    LabeledContent("Отпечаток", value: fingerprint)
-                        .textSelection(.enabled)
-                }
-            } footer: {
-                Text("Сверьте отпечаток с показанным на Mac в Настройках → Подключения.")
-            }
-            Section {
-                Button("Забыть Mac…", role: .destructive) { confirmForget = true }
-            } footer: {
-                Text("Для повторного подключения потребуется новый QR-код.")
-            }
-        }
-        .scrollContentBackground(.hidden)
-        .background { MobileAmbientBackground() }
-        .navigationTitle("Подключение")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.visible, for: .navigationBar)
         .alert("Забыть Mac?", isPresented: $confirmForget) {
             Button("Забыть", role: .destructive) { model.forgetMac() }
             Button("Отмена", role: .cancel) {}

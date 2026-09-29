@@ -7,6 +7,10 @@ enum MobileTab: Hashable {
     case settings
 }
 
+enum MobileSettingsDestination: Hashable {
+    case appearance
+}
+
 enum MobileDestination: Hashable {
     case conversation(PingviSessionSummary)
 }
@@ -20,6 +24,7 @@ final class MobileRouter: ObservableObject {
     @Published var tab: MobileTab = .queue
     @Published var queuePath: [MobileDestination] = []
     @Published var dialogsPath: [MobileDestination] = []
+    @Published var settingsPath: [MobileSettingsDestination] = []
     /// Question shown in the answer sheet above whichever tab is active.
     @Published var presentedQuestion: PingviQuestion?
 
@@ -30,6 +35,9 @@ final class MobileRouter: ObservableObject {
             if MobileDocumentationPreview.screen == .conversation,
                let session = MobileDocumentationPreview.snapshot.sessions.first(where: { $0.id == MobileDocumentationPreview.conversationSessionID }) {
                 queuePath = [.conversation(session)]
+            }
+            if MobileDocumentationPreview.screen == .appearance {
+                settingsPath = [.appearance]
             }
             if MobileDocumentationPreview.presentsQuestion {
                 presentedQuestion = MobileDocumentationPreview.snapshot.questions.first
@@ -74,5 +82,6 @@ final class MobileRouter: ObservableObject {
         tab = .queue
         queuePath = []
         dialogsPath = []
+        settingsPath = []
     }
 }
