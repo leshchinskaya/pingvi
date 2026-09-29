@@ -475,10 +475,12 @@ private struct SessionCard: View {
 struct ConversationView: View {
     @EnvironmentObject private var model: MobileAppModel
     @EnvironmentObject private var router: MobileRouter
-    @Environment(\.mobileTab) private var tab
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let session: PingviSessionSummary
     @State private var draft = ""
     @State private var positionedAtLatestMessage = false
+    @State private var atBottom = true
+    @State private var hasUnseenMessages = false
 
     private let bottomAnchorID = "conversation-bottom"
 
@@ -489,65 +491,17 @@ struct ConversationView: View {
     private var conversation: PingviConversation? { model.conversations[session.id] }
     private var question: PingviQuestion? { model.snapshot.questions.first(where: { $0.id == session.id }) }
     private var sending: Bool { model.sendingChats.contains(session.id) }
+    private var busy: Bool { conversation?.busy == true }
 
     var body: some View {
         ZStack {
             MobileAmbientBackground()
             VStack(spacing: 0) {
+                if let question { pinnedQuestion(question) }
                 ScrollViewReader { reader in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 16) {
-                            conversationHeader
-                            if let question {
-                                Button { router.present(question) } label: {
-                                    HStack {
-                                        Image(systemName: "hand.raised.fill").foregroundStyle(.orange)
-                                        Text("Агент ждёт ответа").font(.headline)
-                                        Spacer()
-                                        Image(systemName: "chevron.right")
-                                    }
-                                    .padding(16)
-                                    .mobileGlassCard(radius: 18, selected: true)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                            if let error = model.conversationErrors[session.id] {
-                                inlineNotice(error, systemImage: "exclamationmark.triangle.fill")
-                            }
-                            if model.loadingConversations.contains(session.id) && conversation == nil {
-                                ProgressView("Загружаем переписку…")
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 36)
-                            } else if let conversation {
-                                if conversation.partial {
-                                    Label("Показана доступная часть истории", systemImage: "clock.badge.exclamationmark")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                if !conversation.context.isEmpty {
-                                    DisclosureGroup("Недавний контекст") {
-                                        Text(conversation.context).font(.callout.monospaced()).textSelection(.enabled)
-                                    }
-                                    .padding(16)
-                                    .mobileGlassCard(radius: 18)
-                                }
-                                if conversation.messages.isEmpty && conversation.context.isEmpty {
-                                    ContentUnavailableView("Сообщений пока нет", systemImage: "bubble.left", description: Text("Напишите первое сообщение, когда агент готов."))
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 32)
-                                }
-                                ForEach(conversation.messages) { message in
-                                    ChatBubble(message: message, agent: conversation.agent)
-                                }
-                                if conversation.busy {
-                                    Label("Агент пишет…", systemImage: "ellipsis.bubble")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            if let failure = model.chatFailures[session.id] {
-                                FailedChatBubble(sessionID: session.id, failure: failure)
-                            }
+                            messages
                             Color.clear.frame(height: 1).id(bottomAnchorID)
                         }
                         .padding(.horizontal, 18)
@@ -555,9 +509,39 @@ struct ConversationView: View {
                         .frame(maxWidth: 720)
                         .frame(maxWidth: .infinity)
                     }
-                    .onChange(of: conversation?.messages.map(\.id) ?? [], initial: true) { _, messageIDs in
-                        positionAtLatestMessageIfNeeded(reader, messageIDs: messageIDs)
+                    .onScrollGeometryChange(for: Bool.self) { geometry in
+                        geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - 80
+                    } action: { _, nearBottom in
+                        atBottom = nearBottom
+                        if nearBottom { hasUnseenMessages = false }
                     }
+                    .onChange(of: conversation?.messages.map(\.id) ?? [], initial: true) { old, messageIDs in
+                        if !positionedAtLatestMessage {
+                            positionAtLatestMessageIfNeeded(reader, messageIDs: messageIDs)
+                        } else if messageIDs != old {
+                            followNewContent(reader)
+                        }
+                    }
+                    .onChange(of: busy) { _, _ in if positionedAtLatestMessage { followNewContent(reader) } }
+                    .onChange(of: model.chatFailures[session.id] != nil) { _, _ in followNewContent(reader) }
+                    .overlay(alignment: .bottom) {
+                        if hasUnseenMessages {
+                            Button {
+                                scrollToBottom(reader)
+                                hasUnseenMessages = false
+                            } label: {
+                                Label("Новые сообщения", systemImage: "arrow.down")
+                                    .font(.subheadline.weight(.semibold))
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 9)
+                            }
+                            .buttonStyle(.plain)
+                            .mobileGlassCard(radius: 20, selected: true)
+                            .padding(.bottom, 10)
+                            .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+                        }
+                    }
+                    .animation(reduceMotion ? nil : .snappy, value: hasUnseenMessages)
                 }
                 composer
             }
@@ -568,6 +552,17 @@ struct ConversationView: View {
         .toolbar(.visible, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                VStack(spacing: 1) {
+                    Text(currentSession.title).font(.headline).lineLimit(1)
+                    Text(currentSession.agent.capitalized + " · " + currentSession.project)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isHeader)
+            }
             if currentSession.sessionStatus.isUnreadResult {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { model.markConversationRead(sessionID: session.id) } label: {
@@ -585,9 +580,87 @@ struct ConversationView: View {
                 .accessibilityLabel("Обновить переписку")
             }
         }
-        .task(id: session.id) { model.loadConversation(sessionID: session.id) }
+        .task(id: session.id) {
+            draft = model.chatDraft(for: session.id)
+            model.loadConversation(sessionID: session.id)
+        }
+        .task(id: busy) { await pollWhileBusy() }
+        .onChange(of: draft) { _, text in model.setChatDraft(text, for: session.id) }
         .onChange(of: model.state == .connected) { _, connected in
             if connected && conversation == nil { model.loadConversation(sessionID: session.id) }
+        }
+    }
+
+    @ViewBuilder
+    private var messages: some View {
+        if let error = model.conversationErrors[session.id] {
+            inlineNotice(error, systemImage: "exclamationmark.triangle.fill")
+        }
+        if model.loadingConversations.contains(session.id) && conversation == nil {
+            ProgressView("Загружаем переписку…")
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 36)
+        } else if let conversation {
+            if conversation.partial {
+                Label("Показана доступная часть истории", systemImage: "clock.badge.exclamationmark")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if !conversation.context.isEmpty {
+                DisclosureGroup("Недавний контекст") {
+                    Text(conversation.context).font(.callout.monospaced()).textSelection(.enabled)
+                }
+                .padding(16)
+                .mobileGlassCard(radius: 18)
+            }
+            if conversation.messages.isEmpty && conversation.context.isEmpty {
+                ContentUnavailableView("Сообщений пока нет", systemImage: "bubble.left", description: Text("Напишите первое сообщение, когда агент готов."))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 32)
+            }
+            ForEach(conversation.messages) { message in
+                ChatBubble(message: message, agent: conversation.agent)
+            }
+            if conversation.busy {
+                TypingIndicator(agent: conversation.agent)
+            }
+        }
+        if let failure = model.chatFailures[session.id] {
+            FailedChatBubble(sessionID: session.id, failure: failure)
+        }
+    }
+
+    private func pinnedQuestion(_ question: PingviQuestion) -> some View {
+        Button { router.present(question) } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "hand.raised.fill").foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Агент ждёт ответа").font(.subheadline.weight(.semibold))
+                    Text(question.question).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer()
+                Text("Ответить").font(.subheadline.weight(.semibold)).foregroundStyle(MobilePalette.accent)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .mobileGlassCard(radius: 18, selected: true)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
+        .padding(.bottom, 4)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Reloads the conversation while the agent is writing so new text appears without manual refresh.
+    private func pollWhileBusy() async {
+        guard busy else { return }
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(4))
+            guard !Task.isCancelled, model.conversations[session.id]?.busy == true else { return }
+            if model.state == .connected && !model.loadingConversations.contains(session.id) {
+                model.loadConversation(sessionID: session.id, force: true)
+            }
         }
     }
 
@@ -600,6 +673,26 @@ struct ConversationView: View {
         }
     }
 
+    /// Keeps the reader at the latest message only if they were already there.
+    private func followNewContent(_ reader: ScrollViewProxy) {
+        if atBottom {
+            Task { @MainActor in
+                await Task.yield()
+                scrollToBottom(reader)
+            }
+        } else {
+            hasUnseenMessages = true
+        }
+    }
+
+    private func scrollToBottom(_ reader: ScrollViewProxy) {
+        if reduceMotion {
+            reader.scrollTo(bottomAnchorID, anchor: .bottom)
+        } else {
+            withAnimation(.snappy) { reader.scrollTo(bottomAnchorID, anchor: .bottom) }
+        }
+    }
+
     private func inlineNotice(_ text: String, systemImage: String) -> some View {
         Label(text, systemImage: systemImage)
             .font(.subheadline)
@@ -609,17 +702,9 @@ struct ConversationView: View {
             .mobileGlassCard(radius: 18)
     }
 
-    private var conversationHeader: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(currentSession.title).font(.title2.bold())
-            Text(currentSession.agent.capitalized + " · " + currentSession.project)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Text(currentSession.preview).font(.caption).foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(18)
-        .mobileGlassCard()
+    private var composerNotice: String? {
+        guard let conversation, !conversation.canSend else { return nil }
+        return conversation.reason.isEmpty ? String(localized: "Агент сейчас не принимает сообщения.") : conversation.reason
     }
 
     private var composer: some View {
@@ -645,14 +730,45 @@ struct ConversationView: View {
                 .disabled(model.state != .connected || conversation?.canSend != true || sending || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .accessibilityLabel("Отправить")
             }
-            Text(conversation?.canSend == true ? "Сообщение будет передано в исходную сессию на Mac." : (conversation?.reason ?? "Проверяем готовность агента…"))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            if let composerNotice {
+                Label(composerNotice, systemImage: "info.circle")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.top, 10)
         .padding(.bottom, 8)
         .background(.bar)
+    }
+}
+
+private struct TypingIndicator: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let agent: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(agent.capitalized)
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+            TimelineView(.periodic(from: .now, by: 0.4)) { context in
+                let phase = reduceMotion ? -1 : Int(context.date.timeIntervalSinceReferenceDate / 0.4) % 3
+                HStack(spacing: 5) {
+                    ForEach(0..<3, id: \.self) { index in
+                        Circle()
+                            .fill(.secondary)
+                            .frame(width: 7, height: 7)
+                            .opacity(phase == index ? 1 : 0.35)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(.thinMaterial, in: Capsule())
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Агент пишет…")
     }
 }
 
@@ -665,9 +781,13 @@ private struct ChatBubble: View {
             Text(message.role == .user ? String(localized: "Вы") : agent.capitalized)
                 .font(.caption.bold())
                 .foregroundStyle(.secondary)
-            Text(message.text)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: message.role == .user ? .trailing : .leading)
+            if message.role == .user {
+                Text(message.text)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            } else {
+                MobileMarkdownView(message.text)
+            }
             if message.state == .submitted || message.state == .uncertain || message.state == .checked {
                 Text(messageState)
                     .font(.caption2)

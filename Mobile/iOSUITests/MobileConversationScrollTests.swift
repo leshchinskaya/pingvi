@@ -75,4 +75,17 @@ final class MobileConversationScrollTests: XCTestCase {
         app.buttons["Закрыть"].tap()
         XCTAssertTrue(app.staticTexts["Ждут ответа"].waitForExistence(timeout: 3))
     }
+
+    func testAgentMarkdownRendersCodeBlockWithCopyAction() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--documentation-preview", "--documentation-screen", "conversation"]
+        app.launch()
+
+        XCTAssertTrue(app.buttons["Скопировать код"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.staticTexts["```sh"].exists, "Разметка не должна показываться сырой")
+        XCTAssertFalse(
+            app.staticTexts["Сообщение будет передано в исходную сессию на Mac."].exists,
+            "Подпись под полем ввода показывается только при проблеме"
+        )
+    }
 }

@@ -15,6 +15,7 @@
 		56DD70197CEF415DC5104575 /* MobileViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A65106DAB10C082DA6DA090 /* MobileViews.swift */; };
 		621F092159AA2591F7101ADC /* MobileAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CD9C1AE355790AD1BEC0F7E /* MobileAppearance.swift */; };
 		70D17D799A49B3A7A4D03963 /* MobileReplyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB42B1E76C1CD051EBE7B3D7 /* MobileReplyTests.swift */; };
+		726F52FD3165F624819EA306 /* MobileMarkdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A5E05839FC2910A67384819 /* MobileMarkdown.swift */; };
 		797F1C606E2765FB29016100 /* MobileDocumentationPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC40A1FF5F3E1BE307B9AEE4 /* MobileDocumentationPreview.swift */; };
 		7E34B0BD7E87B470341B839A /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = D35121EF6D7DCC5DCC09DCF0 /* Localizable.xcstrings */; };
 		8FA18ECB72EB976DC7AD779C /* WatchViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D2C6DD92339336FCD383092 /* WatchViews.swift */; };
@@ -85,6 +86,7 @@
 		423F40E4A91044700B23AFD1 /* PingviMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PingviMobileApp.swift; sourceTree = "<group>"; };
 		5018FDA7CB90D437D8E2032F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		6A5B847016498FA991C2F7D0 /* MobileAppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileAppModel.swift; sourceTree = "<group>"; };
+		6A5E05839FC2910A67384819 /* MobileMarkdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileMarkdown.swift; sourceTree = "<group>"; };
 		79C9E2A4B9D541FA179A672C /* agent-attention */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "agent-attention"; path = ..; sourceTree = SOURCE_ROOT; };
 		805647583CE1CBD8D2F23CD2 /* PingviWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PingviWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9330C5757B9D303E7241A38E /* PhoneWatchBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneWatchBridge.swift; sourceTree = "<group>"; };
@@ -156,6 +158,7 @@
 				6A5B847016498FA991C2F7D0 /* MobileAppModel.swift */,
 				AC40A1FF5F3E1BE307B9AEE4 /* MobileDocumentationPreview.swift */,
 				C0CDD1A8059E248A8EB6EE19 /* MobileFeedback.swift */,
+				6A5E05839FC2910A67384819 /* MobileMarkdown.swift */,
 				BDC34B8597AB64FD20C17368 /* MobileNotifications.swift */,
 				AFC450D54574B819797AD01F /* MobileRouter.swift */,
 				381364DFED8195DFD0A92353 /* MobileUndoQueue.swift */,
@@ -384,6 +387,7 @@
 				621F092159AA2591F7101ADC /* MobileAppearance.swift in Sources */,
 				797F1C606E2765FB29016100 /* MobileDocumentationPreview.swift in Sources */,
 				BAA724DE4B9F29A15C49D0D4 /* MobileFeedback.swift in Sources */,
+				726F52FD3165F624819EA306 /* MobileMarkdown.swift in Sources */,
 				B39B5CC4D63A0808A2D57EE7 /* MobileNotifications.swift in Sources */,
 				46F11B55B319640242670453 /* MobileRouter.swift in Sources */,
 				192C766474DB854117431AC3 /* MobileUndoQueue.swift in Sources */,

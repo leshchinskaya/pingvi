@@ -97,6 +97,9 @@ final class MobileAppModel: ObservableObject {
     private var repliesByCommand: [String: PingviReply] = [:]
     private var chatTextsBySession: [String: String] = [:]
     private static let lastSyncKey = "lastSnapshotAt"
+    private static let chatDraftsKey = "chatDrafts"
+    /// Unsent chat text per session. Not published: typing must not re-render every observer.
+    private var chatDrafts: [String: String] = [:]
 
     private init() {
         let saved = keychain.codable(StoredMobileIdentity.self, for: "identity")
@@ -118,6 +121,7 @@ final class MobileAppModel: ObservableObject {
             snapshot = cached
         }
         lastSyncAt = UserDefaults.standard.object(forKey: Self.lastSyncKey) as? Date
+        chatDrafts = UserDefaults.standard.dictionary(forKey: Self.chatDraftsKey) as? [String: String] ?? [:]
         configureClient()
 #if DEBUG
         if MobileDocumentationPreview.isEnabled {
@@ -276,6 +280,8 @@ final class MobileAppModel: ObservableObject {
         conversationErrors = [:]
         repliesByCommand = [:]
         chatTextsBySession = [:]
+        chatDrafts = [:]
+        UserDefaults.standard.removeObject(forKey: Self.chatDraftsKey)
         lastSyncAt = nil
         UserDefaults.standard.removeObject(forKey: Self.lastSyncKey)
         MobileRouter.shared.reset()
@@ -286,6 +292,9 @@ final class MobileAppModel: ObservableObject {
     }
 
     func loadConversation(sessionID: String, force: Bool = false) {
+#if DEBUG
+        if MobileDocumentationPreview.isEnabled { return }
+#endif
         guard state == .connected else {
             if conversations[sessionID] == nil {
                 conversationErrors[sessionID] = String(localized: "Переписка загрузится, когда появится связь с Mac.")
@@ -331,6 +340,15 @@ final class MobileAppModel: ObservableObject {
             conversationToken: conversation.token,
             text: text
         ))
+    }
+
+    func chatDraft(for sessionID: String) -> String { chatDrafts[sessionID] ?? "" }
+
+    func setChatDraft(_ text: String, for sessionID: String) {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : text
+        guard chatDrafts[sessionID] != value else { return }
+        chatDrafts[sessionID] = value
+        UserDefaults.standard.set(chatDrafts, forKey: Self.chatDraftsKey)
     }
 
     func retryChat(sessionID: String) {

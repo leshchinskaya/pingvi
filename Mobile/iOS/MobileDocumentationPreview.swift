@@ -28,6 +28,10 @@ enum MobileDocumentationPreview {
         ProcessInfo.processInfo.arguments.contains("--ui-test-question-sheet")
     }
 
+    static var conversationIsBusy: Bool {
+        ProcessInfo.processInfo.arguments.contains("--ui-test-busy")
+    }
+
     static var isEnabled: Bool {
         ProcessInfo.processInfo.arguments.contains("--documentation-preview")
     }
@@ -169,7 +173,7 @@ enum MobileDocumentationPreview {
             PingviChatMessage(
                 id: "demo-message-4",
                 role: .assistant,
-                text: "Добавил очередь вопросов, историю диалогов и ответы прямо с iPhone. Готовый результат можно открыть из уведомления или вкладки «Диалоги».",
+                text: "Добавил очередь вопросов, историю диалогов и ответы прямо с iPhone:\n\n- готовый результат открывается из **уведомления**;\n- вкладка «Диалоги» показывает все сессии.\n\n```sh\nxcodebuild test -scheme PingviMobile\n```\nВсе тесты проходят.",
                 state: .received
             )
         ]
@@ -186,9 +190,9 @@ enum MobileDocumentationPreview {
             messages: conversationMessages,
             partial: false,
             context: "",
-            canSend: true,
-            busy: false,
-            reason: "",
+            canSend: !conversationIsBusy,
+            busy: conversationIsBusy,
+            reason: conversationIsBusy ? "Агент ещё работает. Сообщение можно будет отправить после ответа." : "",
             token: "demo-conversation-token",
             pending: false
         )
