@@ -642,7 +642,11 @@ struct DialogsView: View {
     private func sessionRow(_ session: PingviSessionSummary) -> some View {
         let question = model.snapshot.questions.first { $0.id == session.id }
         return Button { router.push(.conversation(session), in: .dialogs) } label: {
-            SessionCard(session: session, marking: model.markingReadSessions.contains(session.id))
+            SessionCard(
+                session: session,
+                marking: model.markingReadSessions.contains(session.id),
+                queued: model.queuedChats[session.id] != nil
+            )
         }
         .buttonStyle(.plain)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -689,6 +693,7 @@ private extension View {
 private struct SessionCard: View {
     let session: PingviSessionSummary
     var marking = false
+    var queued = false
 
     var body: some View {
         let status = session.sessionStatus
@@ -705,6 +710,11 @@ private struct SessionCard: View {
                     }
                 }
                 Text(session.preview).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                if queued {
+                    Label("Сообщение в очереди", systemImage: "clock")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(MobilePalette.accent)
+                }
                 HStack(spacing: 5) {
                     Text(session.agent.capitalized)
                     Text("·")
@@ -779,6 +789,7 @@ struct ConversationView: View {
                     }
                     .onChange(of: busy) { _, _ in if positionedAtLatestMessage { followNewContent(reader) } }
                     .onChange(of: model.chatFailures[session.id] != nil) { _, _ in followNewContent(reader) }
+                    .onChange(of: model.queuedChats[session.id]) { _, _ in followNewContent(reader) }
                     .overlay(alignment: .bottom) {
                         if hasUnseenMessages {
                             Button {
@@ -883,6 +894,14 @@ struct ConversationView: View {
         if let failure = model.chatFailures[session.id] {
             FailedChatBubble(sessionID: session.id, failure: failure)
         }
+        if let queued = model.queuedChats[session.id] {
+            QueuedChatBubble(queued: queued) {
+                let text = model.takeQueuedChat(sessionID: session.id)
+                draft = draft.isEmpty ? text : text + "\n\n" + draft
+            } cancel: {
+                model.cancelQueuedChat(sessionID: session.id)
+            }
+        }
     }
 
     private func pinnedQuestion(_ question: PingviQuestion) -> some View {
@@ -957,9 +976,12 @@ struct ConversationView: View {
             .mobileGlassCard(radius: 18)
     }
 
+    /// Why a message will wait instead of going out now. Writing is never blocked.
     private var composerNotice: String? {
+        if model.queuedChats[session.id] != nil { return nil }
         guard let conversation, !conversation.canSend else { return nil }
-        return conversation.reason.isEmpty ? String(localized: "Агент сейчас не принимает сообщения.") : conversation.reason
+        let reason = conversation.reason.isEmpty ? String(localized: "Сессия сейчас занята.") : conversation.reason
+        return reason + " " + String(localized: "Сообщение отправится, когда она освободится.")
     }
 
     private var composer: some View {
@@ -972,18 +994,18 @@ struct ConversationView: View {
                     .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 Button {
                     let text = draft
-                    model.sendChat(sessionID: session.id, text: text)
-                    if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        draft = ""
-                    }
+                    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                    model.submitChat(sessionID: session.id, text: text)
+                    draft = ""
                 } label: {
                     Image(systemName: sending ? "ellipsis" : "arrow.up")
                         .font(.headline)
                         .frame(width: 22, height: 22)
                 }
                 .mobilePrimaryButton()
-                .disabled(model.state != .connected || conversation?.canSend != true || sending || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .accessibilityLabel("Отправить")
+                .accessibilityHint(composerNotice == nil ? "" : "Сообщение встанет в очередь")
             }
             if let composerNotice {
                 Label(composerNotice, systemImage: "info.circle")
@@ -1062,6 +1084,37 @@ private struct ChatBubble: View {
         case .checked: return String(localized: "Проверено в исходной сессии")
         case .received: return ""
         }
+    }
+}
+
+/// A message waiting on the phone until the session can accept it.
+private struct QueuedChatBubble: View {
+    let queued: MobileQueuedChat
+    let edit: () -> Void
+    let cancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            Text(queued.text)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(14)
+                .background {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(MobilePalette.accent.opacity(0.5), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+                }
+            HStack(spacing: 12) {
+                Label("В очереди · отправится, когда сессия освободится", systemImage: "clock")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Изменить", action: edit)
+                    .font(.caption.weight(.semibold))
+                Button("Отменить", role: .destructive, action: cancel)
+                    .font(.caption.weight(.semibold))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .accessibilityElement(children: .contain)
     }
 }
 

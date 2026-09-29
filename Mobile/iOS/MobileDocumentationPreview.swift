@@ -33,6 +33,11 @@ enum MobileDocumentationPreview {
         ProcessInfo.processInfo.arguments.contains("--ui-test-busy")
     }
 
+    static var queuedChats: [String: MobileQueuedChat] {
+        guard ProcessInfo.processInfo.arguments.contains("--ui-test-queued") else { return [:] }
+        return [conversationSessionID: MobileQueuedChat(text: "Проверь ещё раз сборку на iPhone SE", queuedAt: Date())]
+    }
+
     static var isEnabled: Bool {
         ProcessInfo.processInfo.arguments.contains("--documentation-preview")
     }

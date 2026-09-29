@@ -97,6 +97,7 @@ final class MobileAppModel: ObservableObject {
     @Published private(set) var replyFailures: [String: MobileReplyFailure] = [:]
     @Published private(set) var chatFailures: [String: MobileChatFailure] = [:]
     @Published private(set) var conversationErrors: [String: String] = [:]
+    @Published private(set) var queuedChats: [String: MobileQueuedChat] = [:]
 
     let watch = PhoneWatchBridge()
     let undo = MobileUndoQueue()
@@ -110,6 +111,8 @@ final class MobileAppModel: ObservableObject {
     private var chatTextsBySession: [String: String] = [:]
     private static let lastSyncKey = "lastSnapshotAt"
     private static let chatDraftsKey = "chatDrafts"
+    private static let queuedChatsKey = "queuedChats"
+    private var queueTask: Task<Void, Never>?
     /// Unsent chat text per session. Not published: typing must not re-render every observer.
     private var chatDrafts: [String: String] = [:]
 
@@ -134,6 +137,10 @@ final class MobileAppModel: ObservableObject {
         }
         lastSyncAt = UserDefaults.standard.object(forKey: Self.lastSyncKey) as? Date
         chatDrafts = UserDefaults.standard.dictionary(forKey: Self.chatDraftsKey) as? [String: String] ?? [:]
+        if let data = UserDefaults.standard.data(forKey: Self.queuedChatsKey),
+           let saved = try? JSONDecoder().decode([String: MobileQueuedChat].self, from: data) {
+            queuedChats = saved
+        }
         configureClient()
 #if DEBUG
         if MobileDocumentationPreview.isEnabled {
@@ -142,6 +149,7 @@ final class MobileAppModel: ObservableObject {
             self.conversations = MobileDocumentationPreview.delaysConversationFixture ? [:] : MobileDocumentationPreview.conversations
             self.state = MobileDocumentationPreview.simulatesOffline ? .disconnected("Mac недоступен") : .connected
             self.lastSyncAt = Date().addingTimeInterval(MobileDocumentationPreview.simulatesOffline ? -300 : 0)
+            self.queuedChats = MobileDocumentationPreview.queuedChats
             if MobileDocumentationPreview.delaysConversationFixture {
                 Task { @MainActor [weak self] in
                     try? await Task.sleep(for: .milliseconds(300))
@@ -170,6 +178,7 @@ final class MobileAppModel: ObservableObject {
 #endif
         if state == .connected { client.requestSnapshot() }
         else if pairing != nil { client.start() }
+        startQueueDelivery()
     }
 
     /// Manual retry from the connection banner.
@@ -190,7 +199,97 @@ final class MobileAppModel: ObservableObject {
         if toast?.id == id { toast = nil }
     }
 
+    // MARK: Chat queue
+
+    /// Entry point for the composer: sends now when the session is ready, otherwise queues.
+    func submitChat(sessionID: String, text: String) {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        let canSend = conversations[sessionID]?.canSend == true
+        if MobileChatQueue.sendsImmediately(
+            connected: state == .connected,
+            canSend: canSend,
+            sending: sendingChats.contains(sessionID),
+            hasQueued: queuedChats[sessionID] != nil
+        ) {
+            sendChat(sessionID: sessionID, text: text)
+            return
+        }
+        chatFailures[sessionID] = nil
+        queuedChats[sessionID] = MobileChatQueue.enqueue(text, into: queuedChats[sessionID])
+        persistQueue()
+        MobileHaptics.selection()
+        startQueueDelivery()
+        deliverQueuedChat(sessionID: sessionID)
+    }
+
+    func cancelQueuedChat(sessionID: String) {
+        queuedChats[sessionID] = nil
+        persistQueue()
+    }
+
+    /// Takes the queued text back so it can be edited in the composer.
+    func takeQueuedChat(sessionID: String) -> String {
+        let text = queuedChats.removeValue(forKey: sessionID)?.text ?? ""
+        persistQueue()
+        return text
+    }
+
+    private func deliverQueuedChat(sessionID: String) {
+        guard let queued = queuedChats[sessionID],
+              MobileChatQueue.readyToDeliver(
+                connected: state == .connected,
+                canSend: conversations[sessionID]?.canSend == true,
+                sending: sendingChats.contains(sessionID)
+              ) else { return }
+        queuedChats[sessionID] = nil
+        persistQueue()
+        sendChat(sessionID: sessionID, text: queued.text)
+    }
+
+    /// While something is queued and the app is open, refresh those sessions so delivery
+    /// happens as soon as the Mac reports them ready.
+    private func startQueueDelivery() {
+#if DEBUG
+        if MobileDocumentationPreview.isEnabled { return }
+#endif
+        guard queueTask == nil, !queuedChats.isEmpty else { return }
+        queueTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let self, !self.queuedChats.isEmpty else { break }
+                if self.state == .connected {
+                    for sessionID in self.queuedChats.keys where !self.loadingConversations.contains(sessionID) {
+                        if self.snapshot.sessions.contains(where: { $0.id == sessionID }) {
+                            self.loadConversation(sessionID: sessionID, force: true)
+                        } else {
+                            // The session is gone on the Mac; keep the text visible as a failure instead of waiting forever.
+                            let text = self.queuedChats.removeValue(forKey: sessionID)?.text ?? ""
+                            self.chatFailures[sessionID] = MobileChatFailure(text: text, message: String(localized: "Сессия закрыта на Mac"))
+                            self.persistQueue()
+                        }
+                    }
+                }
+                try? await Task.sleep(for: .seconds(5))
+            }
+            self?.queueTask = nil
+        }
+    }
+
+    private func stopQueueDelivery() {
+        queueTask?.cancel()
+        queueTask = nil
+    }
+
+    private func persistQueue() {
+        if queuedChats.isEmpty {
+            UserDefaults.standard.removeObject(forKey: Self.queuedChatsKey)
+        } else if let data = try? JSONEncoder().encode(queuedChats) {
+            UserDefaults.standard.set(data, forKey: Self.queuedChatsKey)
+        }
+    }
+
     func enteredBackground() {
+        stopQueueDelivery()
         // Keep the connection alive only for the background time iOS grants naturally.
         watch.update(snapshot: snapshot, connection: state)
     }
@@ -313,6 +412,9 @@ final class MobileAppModel: ObservableObject {
         chatTextsBySession = [:]
         chatDrafts = [:]
         UserDefaults.standard.removeObject(forKey: Self.chatDraftsKey)
+        stopQueueDelivery()
+        queuedChats = [:]
+        persistQueue()
         lastSyncAt = nil
         UserDefaults.standard.removeObject(forKey: Self.lastSyncKey)
         MobileRouter.shared.reset()
@@ -424,6 +526,7 @@ final class MobileAppModel: ObservableObject {
                 guard let self else { return }
                 if state != .connected { self.awaitingFirstSnapshot = true }
                 self.state = state
+                if state == .connected { self.startQueueDelivery() }
                 if self.pairingInProgress, self.pairing == nil, case .disconnected(let reason) = state {
                     self.pairingInProgress = false
                     self.errorMessage = String(localized: "Не удалось подключиться к Mac: \(reason)")
@@ -508,6 +611,7 @@ final class MobileAppModel: ObservableObject {
                 snapshot = MobileSnapshotUpdater.recording(conversation, in: snapshot)
                 persist(snapshot)
                 watch.update(snapshot: snapshot, connection: state)
+                deliverQueuedChat(sessionID: response.sessionID)
             } else if let error = response.error {
                 conversationErrors[response.sessionID] = error
             }
@@ -515,7 +619,12 @@ final class MobileAppModel: ObservableObject {
             guard let result = message.chatSendResult else { return }
             sendingChats.remove(result.sessionID)
             let text = chatTextsBySession.removeValue(forKey: result.sessionID) ?? ""
-            if result.status == .failed || result.status == .stale || result.status == .uncertain {
+            if result.status == .stale && !text.isEmpty {
+                // The session changed between the readiness check and the send: wait for the next chance.
+                queuedChats[result.sessionID] = MobileChatQueue.enqueue(text, into: queuedChats[result.sessionID])
+                persistQueue()
+                startQueueDelivery()
+            } else if result.status == .failed || result.status == .stale || result.status == .uncertain {
                 chatFailures[result.sessionID] = MobileChatFailure(text: text, message: result.message)
                 MobileHaptics.warning()
             } else {

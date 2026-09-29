@@ -118,4 +118,23 @@ final class MobileConversationScrollTests: XCTestCase {
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Оформление'")).firstMatch.tap()
         XCTAssertTrue(app.staticTexts["Иконка"].waitForExistence(timeout: 3))
     }
+
+    func testMessageToBusySessionIsQueuedAndCanBeCancelled() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--documentation-preview", "--documentation-screen", "conversation", "--ui-test-busy"]
+        app.launch()
+
+        let field = app.textFields["Сообщение агенту…"]
+        XCTAssertTrue(field.waitForExistence(timeout: 3))
+        field.tap()
+        field.typeText("Проверь ещё раз")
+        let send = app.buttons["Отправить"]
+        XCTAssertTrue(send.isEnabled, "Отправка доступна, даже когда агент работает")
+        send.tap()
+
+        XCTAssertTrue(app.staticTexts["Проверь ещё раз"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["В очереди · отправится, когда сессия освободится"].exists)
+        app.buttons["Отменить"].tap()
+        XCTAssertFalse(app.staticTexts["Проверь ещё раз"].waitForExistence(timeout: 1))
+    }
 }

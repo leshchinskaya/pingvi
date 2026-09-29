@@ -24,10 +24,22 @@ def ready(screen, agent, status='idle'):
     if re.search(r'esc to interrupt|ctrl\+c to interrupt|enter to confirm|esc to cancel|enter to select', text, re.I):
         return False
     if agent == 'codex':
-        return bool(re.search(r'(?m)^\s*›(?:\s*|\s+' + PLACEHOLDERS + r')$', text) and re.search(r'(?m)^\s*(?:gpt-|o[134]-|codex-).+·', text))
+        # Newer Codex builds print the model in upper case ("GPT-5.6-Sol high · ~/project").
+        return bool(re.search(r'(?m)^\s*›(?:\s*|\s+' + PLACEHOLDERS + r')$', text) and re.search(r'(?mi)^\s*(?:gpt-|o[134]-|codex-).+·', text))
     if agent == 'claude':
         return bool(re.search(r'(?m)^\s*❯\s*$', text) and re.search(r'shortcuts|bypass permissions|accept edits|Claude Code|shift.tab', text, re.I))
     return False
+
+def typed_draft(screen, agent):
+    """Text left unsent in the agent's input line, if any; placeholders do not count."""
+    marker = {'codex': '›', 'claude': '❯'}.get(agent)
+    if not marker:
+        return ''
+    for line in reversed(clean(screen).splitlines()[-16:]):
+        match = re.match(r'^\s*' + marker + r'\s+(.+?)\s*$', line)
+        if match:
+            return '' if re.fullmatch(PLACEHOLDERS, match.group(1)) else match.group(1)
+    return ''
 
 def validate_text(text):
     if not isinstance(text, str) or not text.strip():
@@ -208,8 +220,10 @@ def history(data):
         pending |= state in ('submitted', 'uncertain')
     blocked = session.get('status') in ('working', 'checking', 'unconfirmed', 'offline') or (session.get('kind') == 'hook' and session.get('status') == 'waiting') or bool(session.get('options'))
     available = not blocked and not pending and ready(screen, session['agent'], status)
+    draft = '' if blocked or pending else typed_draft(screen, session['agent'])
     reason = ('Проверьте последнее сообщение в исходной сессии.' if pending else
               'Агент работает. Черновик сохранится до ручной отправки.' if status == 'working' or session.get('status') == 'working' else
+              'В поле ввода исходной сессии остался неотправленный текст «%s». Отправьте или очистите его в терминале.' % (draft[:60] + ('…' if len(draft) > 60 else '')) if draft else
               'Сначала ответьте на запрос агента или освободите поле ввода в исходной сессии.')
     if session['target'].get('terminalApp') == 'Warp' and not session['target'].get('pane'):
         available = False

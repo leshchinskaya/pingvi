@@ -26,6 +26,18 @@ class ChatTests(unittest.TestCase):
         self.assertTrue(chat.ready('❯\n? for shortcuts', 'claude'))
         self.assertFalse(chat.ready('❯ already typing\n? for shortcuts', 'claude'))
 
+    def test_readiness_accepts_upper_case_codex_model_line(self):
+        screen = 'Worked for 40s\n\n›\n\n  GPT-5.6-Sol high · ~/Projects/app · Task'
+        self.assertTrue(chat.ready(screen, 'codex'))
+        self.assertTrue(chat.ready(screen.replace('›', '› Ask Codex to do anything'), 'codex'))
+
+    def test_typed_draft_is_reported_but_placeholders_are_not(self):
+        screen = 'Reply\n› Все нормально, заказ можно делать до конца\n  GPT-5.6-Sol high · ~'
+        self.assertEqual(chat.typed_draft(screen, 'codex'), 'Все нормально, заказ можно делать до конца')
+        self.assertEqual(chat.typed_draft(READY, 'codex'), '')
+        self.assertEqual(chat.typed_draft('❯ already typing\n? for shortcuts', 'claude'), 'already typing')
+        self.assertEqual(chat.typed_draft('❯\n? for shortcuts', 'claude'), '')
+
     def test_controls_cannot_escape_paste_or_invoke_slash_commands(self):
         self.assertEqual(chat.validate_text(' hello\nworld '), 'hello\nworld')
         for value in ('', '\x1b[201~rm bad', '/clear', 'text\x00', 'x' * 32001):

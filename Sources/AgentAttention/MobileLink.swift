@@ -423,7 +423,14 @@ final class MacMobileLink: ObservableObject, @unchecked Sendable {
                 ))
                 self.store.poll()
             } catch {
-                completion(PingviChatSendResult(commandID: commandID, sessionID: session.id, status: .failed, message: error.localizedDescription))
+                // bridge/chat.py raises this before touching the terminal, so the phone may safely retry later.
+                let unchanged = error.localizedDescription.hasPrefix("Состояние диалога изменилось")
+                completion(PingviChatSendResult(
+                    commandID: commandID,
+                    sessionID: session.id,
+                    status: unchanged ? .stale : .failed,
+                    message: error.localizedDescription
+                ))
             }
         }
     }
