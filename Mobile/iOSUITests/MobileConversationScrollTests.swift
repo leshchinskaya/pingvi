@@ -38,6 +38,7 @@ final class MobileConversationScrollTests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.staticTexts["Ждут ответа"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["MacBook Pro"].exists, "Вверху очереди — имя Mac и статус связи")
         XCTAssertFalse(app.staticTexts["Очередь агента"].exists)
         XCTAssertFalse(app.navigationBars["Pingvi"].exists)
         XCTAssertFalse(app.staticTexts["Нет связи с Mac"].exists, "При активном соединении баннер не показывается")

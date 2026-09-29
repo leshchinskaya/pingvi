@@ -236,6 +236,10 @@ struct QueueView: View {
     var body: some View {
         NavigationStack(path: $router.queuePath) {
             List {
+                QueueConnectionHeader()
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 4, trailing: 16))
                 Section {
                     if model.questions.isEmpty {
                         ContentUnavailableView(
@@ -300,12 +304,70 @@ struct QueueView: View {
             }
             .mobileListStyle()
             .refreshable { model.activate() }
-            .mobileConnectionBanner()
             .navigationTitle("Очередь")
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: MobileDestination.self) { MobileDestinationView(destination: $0) }
         }
         .environment(\.mobileTab, .queue)
+    }
+}
+
+/// Top of the queue: the paired Mac as the screen's anchor, with live connection status.
+/// Replaces the generic connection banner on this tab so the status is shown once.
+private struct QueueConnectionHeader: View {
+    @EnvironmentObject private var model: MobileAppModel
+
+    private var inProgress: Bool { model.state == .searching || model.state == .connecting }
+    private var connected: Bool { model.state == .connected }
+
+    private var statusText: String {
+        switch model.state {
+        case .connected: return String(localized: "На связи")
+        case .searching, .connecting: return model.state.description
+        default: return String(localized: "Нет связи")
+        }
+    }
+
+    var body: some View {
+        TimelineView(.everyMinute) { context in
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(model.pairing?.peerName ?? "Mac")
+                        .font(.largeTitle.bold())
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .accessibilityAddTraits(.isHeader)
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        if inProgress {
+                            ProgressView().controlSize(.mini)
+                        } else {
+                            Circle()
+                                .fill(connected ? Color.green : Color.orange)
+                                .frame(width: 8, height: 8)
+                                .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+                        }
+                        Text(subtitle(now: context.date))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer(minLength: 8)
+                if !connected && !inProgress {
+                    Button("Повторить") { model.reconnect() }
+                        .font(.subheadline.weight(.semibold))
+                        .buttonStyle(.bordered)
+                }
+            }
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    private func subtitle(now: Date) -> String {
+        // While connected the data is live, so the sync time only matters when it may be stale.
+        guard !connected, let updated = MobileSyncText.updated(model.lastSyncAt, now: now) else { return statusText }
+        return statusText + " · " + updated
     }
 }
 
