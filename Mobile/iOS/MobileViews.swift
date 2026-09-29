@@ -7,18 +7,10 @@ struct MobileRootView: View {
 
     var body: some View {
         Group {
-            #if DEBUG
-            if MobileDocumentationPreview.isEnabled,
-               MobileDocumentationPreview.screen == .conversation,
-               let session = model.sessions.first(where: { $0.id == MobileDocumentationPreview.conversationSessionID }) {
-                NavigationStack { ConversationView(session: session) }
-            } else if model.isPaired { PairedRootView() }
-            else { PairingView() }
-            #else
             if model.isPaired { PairedRootView() }
             else { PairingView() }
-            #endif
         }
+        .mobileToastOverlay()
         .alert("Pingvi", isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }
@@ -28,29 +20,85 @@ struct MobileRootView: View {
     }
 }
 
-private struct PairedRootView: View {
-    @State private var selection: Int
+private struct MobileTabKey: EnvironmentKey {
+    static let defaultValue: MobileTab = .queue
+}
 
-    init() {
-        #if DEBUG
-        _selection = State(initialValue: MobileDocumentationPreview.isEnabled ? MobileDocumentationPreview.initialTab : 0)
-        #else
-        _selection = State(initialValue: 0)
-        #endif
+extension EnvironmentValues {
+    /// The tab whose navigation stack hosts the current view, so nested screens push onto the right path.
+    var mobileTab: MobileTab {
+        get { self[MobileTabKey.self] }
+        set { self[MobileTabKey.self] = newValue }
     }
+}
+
+private struct PairedRootView: View {
+    @EnvironmentObject private var router: MobileRouter
 
     var body: some View {
-        TabView(selection: $selection) {
+        TabView(selection: $router.tab) {
             QueueView()
                 .tabItem { Label("Очередь", systemImage: "tray.full") }
-                .tag(0)
+                .tag(MobileTab.queue)
             DialogsView()
                 .tabItem { Label("Диалоги", systemImage: "bubble.left.and.bubble.right") }
-                .tag(1)
+                .tag(MobileTab.dialogs)
             NavigationStack { MobileSettingsView() }
                 .tabItem { Label("Настройки", systemImage: "gearshape") }
-                .tag(2)
+                .tag(MobileTab.settings)
         }
+    }
+}
+
+private struct MobileDestinationView: View {
+    let destination: MobileDestination
+
+    var body: some View {
+        switch destination {
+        case .question(let question): QuestionView(question: question)
+        case .conversation(let session): ConversationView(session: session)
+        }
+    }
+}
+
+private extension View {
+    /// Keeps the glass card look inside a plain `List` row while enabling native list behaviour.
+    func mobileListRow() -> some View {
+        listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+    }
+
+    func mobileListStyle() -> some View {
+        listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background { MobileAmbientBackground() }
+    }
+}
+
+private struct MobileSectionHeader: View {
+    let title: LocalizedStringKey
+    var count: Int?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.title3.bold())
+                .foregroundStyle(.primary)
+                .accessibilityAddTraits(.isHeader)
+            if let count {
+                Text("\(count)")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.quaternary, in: Capsule())
+            }
+            Spacer()
+        }
+        .textCase(nil)
+        .padding(.horizontal, 4)
+        .padding(.top, 8)
     }
 }
 
@@ -84,6 +132,7 @@ struct PairingView: View {
                             Text("Подключите Pingvi к Mac")
                                 .font(.largeTitle.bold())
                                 .multilineTextAlignment(.center)
+                                .accessibilityAddTraits(.isHeader)
                             Text("Вопросы агентов — на iPhone и Apple Watch. Ответы возвращаются на Mac напрямую через локальную сеть.")
                                 .font(.body)
                                 .foregroundStyle(.secondary)
@@ -127,8 +176,7 @@ struct PairingView: View {
                     .frame(maxWidth: .infinity)
                 }
             }
-            .navigationTitle("Pingvi")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $scanning) {
                 NavigationStack {
                     QRScanner { value in
@@ -147,115 +195,131 @@ struct PairingView: View {
 
 struct QueueView: View {
     @EnvironmentObject private var model: MobileAppModel
+    @EnvironmentObject private var router: MobileRouter
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                MobileAmbientBackground()
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 18) {
-                        connectionHeader
-
-                        if model.questions.isEmpty {
-                            ContentUnavailableView(
-                                "Никто не ждёт",
-                                systemImage: "checkmark.circle",
-                                description: Text("Новые вопросы появятся здесь при активном соединении с Mac.")
-                            )
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 34)
-                            .mobileGlassCard()
-                        } else {
-                            sectionTitle("Ждут ответа", count: model.questions.count)
-                            ForEach(model.questions) { question in
-                                NavigationLink {
-                                    QuestionView(question: question)
-                                } label: {
+        NavigationStack(path: $router.queuePath) {
+            List {
+                Section {
+                    if model.questions.isEmpty {
+                        ContentUnavailableView(
+                            "Никто не ждёт",
+                            systemImage: "checkmark.circle",
+                            description: Text("Новые вопросы агентов появятся здесь.")
+                        )
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 28)
+                        .mobileGlassCard()
+                        .mobileListRow()
+                    } else {
+                        ForEach(model.questions) { question in
+                            VStack(spacing: 8) {
+                                Button { router.push(.question(question), in: .queue) } label: {
                                     QuestionCard(question: question)
                                 }
                                 .buttonStyle(.plain)
-                            }
-                        }
-
-                        if !model.snapshot.completions.isEmpty {
-                            sectionTitle("Готовые результаты", count: model.snapshot.completions.count)
-                                .padding(.top, 6)
-                            ForEach(model.snapshot.completions) { item in
-                                if let session = model.snapshot.sessions.first(where: { $0.id == item.id }) {
-                                    HStack(spacing: 10) {
-                                        NavigationLink {
-                                            ConversationView(session: session)
-                                        } label: {
-                                            HStack(spacing: 14) {
-                                                Image(systemName: "checkmark.bubble.fill")
-                                                    .font(.title2)
-                                                    .foregroundStyle(.green)
-                                                VStack(alignment: .leading, spacing: 4) {
-                                                    Text(item.title).font(.headline)
-                                                    Text("Открыть готовый результат")
-                                                        .font(.caption)
-                                                        .foregroundStyle(.secondary)
-                                                }
-                                                Spacer()
-                                                Image(systemName: "chevron.right")
-                                                    .font(.caption.bold())
-                                                    .foregroundStyle(.tertiary)
-                                            }
-                                            .padding(18)
-                                            .mobileGlassCard(radius: 20)
-                                        }
-                                        .buttonStyle(.plain)
-                                        .frame(maxWidth: .infinity)
-                                        MarkConversationReadButton(session: session)
-                                    }
+                                if let failure = model.replyFailures[question.id] {
+                                    ReplyFailureRow(sessionID: question.id, failure: failure)
                                 }
                             }
+                            .mobileListRow()
                         }
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 16)
-                    .frame(maxWidth: 720)
-                    .frame(maxWidth: .infinity)
+                } header: {
+                    if model.questions.isEmpty {
+                        EmptyView()
+                    } else {
+                        MobileSectionHeader(title: "Ждут ответа", count: model.questions.count)
+                    }
                 }
-                .refreshable { model.activate() }
-            }
-            .navigationTitle("Pingvi")
-        }
-    }
+                .listSectionSeparator(.hidden)
 
-    private var connectionHeader: some View {
+                if !model.snapshot.completions.isEmpty {
+                    Section {
+                        ForEach(model.snapshot.completions) { item in
+                            if let session = model.snapshot.sessions.first(where: { $0.id == item.id }) {
+                                HStack(spacing: 10) {
+                                    Button { router.push(.conversation(session), in: .queue) } label: {
+                                        CompletionCard(title: item.title)
+                                    }
+                                    .buttonStyle(.plain)
+                                    MarkConversationReadButton(session: session)
+                                }
+                                .mobileListRow()
+                            }
+                        }
+                    } header: {
+                        MobileSectionHeader(title: "Готовые результаты", count: model.snapshot.completions.count)
+                    }
+                    .listSectionSeparator(.hidden)
+                }
+            }
+            .mobileListStyle()
+            .refreshable { model.activate() }
+            .mobileConnectionBanner()
+            .navigationTitle("Очередь")
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(for: MobileDestination.self) { MobileDestinationView(destination: $0) }
+        }
+        .environment(\.mobileTab, .queue)
+    }
+}
+
+private struct CompletionCard: View {
+    let title: String
+
+    var body: some View {
         HStack(spacing: 14) {
-            BrandMark(size: 58)
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Очередь агента").font(.title2.bold())
-                Label(model.state.description,
-                      systemImage: model.state == .connected ? "checkmark.circle.fill" : "wifi.slash")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(model.state == .connected ? .green : .secondary)
+            Image(systemName: "checkmark.bubble.fill")
+                .font(.title2)
+                .foregroundStyle(.green)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.headline)
+                Text("Открыть готовый результат")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption.bold())
+                .foregroundStyle(.tertiary)
         }
         .padding(18)
-        .mobileGlassCard()
+        .mobileGlassCard(radius: 20)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
     }
+}
 
-    private func sectionTitle(_ title: String, count: Int) -> some View {
-        HStack {
-            Text(title).font(.title3.bold())
-            Text("\(count)")
-                .font(.caption.bold())
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(.quaternary, in: Capsule())
-            Spacer()
+private struct ReplyFailureRow: View {
+    @EnvironmentObject private var model: MobileAppModel
+    let sessionID: String
+    let failure: MobileReplyFailure
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Не доставлено").font(.subheadline.weight(.semibold))
+                if !failure.message.isEmpty {
+                    Text(failure.message).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 8)
+            Button("Повторить") { model.retryReply(sessionID: sessionID) }
+                .font(.subheadline.weight(.semibold))
+                .buttonStyle(.borderless)
+                .disabled(model.state != .connected || model.replyingSessions.contains(sessionID))
         }
-        .padding(.horizontal, 4)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .accessibilityElement(children: .combine)
     }
 }
 
 struct DialogsView: View {
     @EnvironmentObject private var model: MobileAppModel
+    @EnvironmentObject private var router: MobileRouter
     @State private var search = ""
     @State private var showNewChat = false
 
@@ -268,44 +332,43 @@ struct DialogsView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                MobileAmbientBackground()
+        NavigationStack(path: $router.dialogsPath) {
+            List {
                 if filtered.isEmpty {
                     ContentUnavailableView(
                         search.isEmpty ? "Диалогов нет" : "Ничего не найдено",
                         systemImage: search.isEmpty ? "bubble.left.and.bubble.right" : "magnifyingglass",
                         description: Text(search.isEmpty ? "Сессии с Mac появятся здесь." : "Попробуйте изменить запрос.")
                     )
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 28)
+                    .mobileListRow()
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(filtered) { session in
-                                HStack(spacing: 10) {
-                                    NavigationLink {
-                                        ConversationView(session: session)
-                                    } label: {
-                                        SessionCard(session: session)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .frame(maxWidth: .infinity)
-                                    if session.status == "done" {
-                                        MarkConversationReadButton(session: session)
-                                    }
-                                }
+                    ForEach(filtered) { session in
+                        HStack(spacing: 10) {
+                            Button { router.push(.conversation(session), in: .dialogs) } label: {
+                                SessionCard(session: session)
+                            }
+                            .buttonStyle(.plain)
+                            if session.sessionStatus.isUnreadResult {
+                                MarkConversationReadButton(session: session)
                             }
                         }
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 14)
-                        .frame(maxWidth: 720)
-                        .frame(maxWidth: .infinity)
+                        .mobileListRow()
                     }
-                    .refreshable { model.activate() }
                 }
             }
+            .mobileListStyle()
+            .refreshable { model.activate() }
+            .mobileConnectionBanner()
             .navigationTitle("Диалоги")
-            .searchable(text: $search, prompt: "Название, проект или текст")
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Название, проект или текст")
             .toolbar {
+                // The tab bar already names the screen; keep the title only for the back button.
+                ToolbarItem(placement: .principal) {
+                    Color.clear.frame(width: 1, height: 1).accessibilityHidden(true)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showNewChat = true } label: { Image(systemName: "square.and.pencil") }
                         .disabled(model.state != .connected || model.snapshot.projects.isEmpty)
@@ -313,7 +376,9 @@ struct DialogsView: View {
                 }
             }
             .sheet(isPresented: $showNewChat) { NewMobileChatView() }
+            .navigationDestination(for: MobileDestination.self) { MobileDestinationView(destination: $0) }
         }
+        .environment(\.mobileTab, .dialogs)
     }
 }
 
@@ -328,7 +393,7 @@ private struct MarkConversationReadButton: View {
                 .frame(width: 44, height: 44)
                 .background(.thinMaterial, in: Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.borderless)
         .disabled(model.state != .connected || model.markingReadSessions.contains(session.id))
         .accessibilityLabel("Отметить «\(session.title)» прочитанным")
     }
@@ -337,36 +402,17 @@ private struct MarkConversationReadButton: View {
 private struct SessionCard: View {
     let session: PingviSessionSummary
 
-    private var symbol: String {
-        switch session.status {
-        case "waiting", "checking", "unconfirmed": return "hand.raised.fill"
-        case "working": return "ellipsis.bubble.fill"
-        case "done": return "checkmark.bubble.fill"
-        case "offline": return "wifi.slash"
-        default: return "bubble.left.and.bubble.right.fill"
-        }
-    }
-
-    private var color: Color {
-        switch session.status {
-        case "waiting", "checking", "unconfirmed": return .orange
-        case "working": return MobilePalette.accent
-        case "done": return .green
-        case "offline": return .secondary
-        default: return MobilePalette.deep
-        }
-    }
-
     var body: some View {
+        let status = session.sessionStatus
         HStack(alignment: .top, spacing: 14) {
-            Image(systemName: symbol)
+            Image(systemName: status.symbol)
                 .font(.title2)
-                .foregroundStyle(color)
+                .foregroundStyle(status.color)
                 .frame(width: 34)
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text(session.title).font(.headline).lineLimit(2)
-                    if session.status == "done" {
+                    if status.isUnreadResult {
                         Circle().fill(.blue).frame(width: 7, height: 7).accessibilityLabel("Не просмотрено")
                     }
                 }
@@ -387,13 +433,16 @@ private struct SessionCard: View {
                 .padding(.top, 5)
         }
         .padding(18)
-        .mobileGlassCard(radius: 20, selected: session.status == "done")
+        .mobileGlassCard(radius: 20, selected: status.isUnreadResult)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
 }
 
 struct ConversationView: View {
     @EnvironmentObject private var model: MobileAppModel
+    @EnvironmentObject private var router: MobileRouter
+    @Environment(\.mobileTab) private var tab
     let session: PingviSessionSummary
     @State private var draft = ""
     @State private var positionedAtLatestMessage = false
@@ -417,9 +466,7 @@ struct ConversationView: View {
                         LazyVStack(alignment: .leading, spacing: 16) {
                             conversationHeader
                             if let question {
-                                NavigationLink {
-                                    QuestionView(question: question)
-                                } label: {
+                                Button { router.push(.question(question), in: tab) } label: {
                                     HStack {
                                         Image(systemName: "hand.raised.fill").foregroundStyle(.orange)
                                         Text("Агент ждёт ответа").font(.headline)
@@ -430,6 +477,9 @@ struct ConversationView: View {
                                     .mobileGlassCard(radius: 18, selected: true)
                                 }
                                 .buttonStyle(.plain)
+                            }
+                            if let error = model.conversationErrors[session.id] {
+                                inlineNotice(error, systemImage: "exclamationmark.triangle.fill")
                             }
                             if model.loadingConversations.contains(session.id) && conversation == nil {
                                 ProgressView("Загружаем переписку…")
@@ -462,6 +512,9 @@ struct ConversationView: View {
                                         .foregroundStyle(.secondary)
                                 }
                             }
+                            if let failure = model.chatFailures[session.id] {
+                                FailedChatBubble(sessionID: session.id, failure: failure)
+                            }
                             Color.clear.frame(height: 1).id(bottomAnchorID)
                         }
                         .padding(.horizontal, 18)
@@ -476,10 +529,13 @@ struct ConversationView: View {
                 composer
             }
         }
+        .mobileConnectionBanner()
         .navigationTitle(currentSession.title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
         .toolbar {
-            if currentSession.status == "done" {
+            if currentSession.sessionStatus.isUnreadResult {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { model.markConversationRead(sessionID: session.id) } label: {
                         Image(systemName: "checkmark.circle")
@@ -497,6 +553,9 @@ struct ConversationView: View {
             }
         }
         .task(id: session.id) { model.loadConversation(sessionID: session.id) }
+        .onChange(of: model.state == .connected) { _, connected in
+            if connected && conversation == nil { model.loadConversation(sessionID: session.id) }
+        }
     }
 
     private func positionAtLatestMessageIfNeeded(_ reader: ScrollViewProxy, messageIDs: [String]) {
@@ -506,6 +565,15 @@ struct ConversationView: View {
             await Task.yield()
             reader.scrollTo(bottomAnchorID, anchor: .bottom)
         }
+    }
+
+    private func inlineNotice(_ text: String, systemImage: String) -> some View {
+        Label(text, systemImage: systemImage)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .mobileGlassCard(radius: 18)
     }
 
     private var conversationHeader: some View {
@@ -532,7 +600,7 @@ struct ConversationView: View {
                 Button {
                     let text = draft
                     model.sendChat(sessionID: session.id, text: text)
-                    if conversation?.canSend == true && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         draft = ""
                     }
                 } label: {
@@ -561,7 +629,7 @@ private struct ChatBubble: View {
 
     var body: some View {
         VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 5) {
-            Text(message.role == .user ? "Вы" : agent.capitalized)
+            Text(message.role == .user ? String(localized: "Вы") : agent.capitalized)
                 .font(.caption.bold())
                 .foregroundStyle(.secondary)
             Text(message.text)
@@ -581,11 +649,40 @@ private struct ChatBubble: View {
 
     private var messageState: String {
         switch message.state {
-        case .submitted: return "Передано в сессию · ожидаем подтверждения"
-        case .uncertain: return "Результат отправки неизвестен"
-        case .checked: return "Проверено в исходной сессии"
+        case .submitted: return String(localized: "Передано в сессию · ожидаем подтверждения")
+        case .uncertain: return String(localized: "Результат отправки неизвестен")
+        case .checked: return String(localized: "Проверено в исходной сессии")
         case .received: return ""
         }
+    }
+}
+
+/// A message that never reached the Mac, kept in place so the user can retry without retyping.
+private struct FailedChatBubble: View {
+    @EnvironmentObject private var model: MobileAppModel
+    let sessionID: String
+    let failure: MobileChatFailure
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            Text(failure.text)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(14)
+                .background(Color.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            HStack(spacing: 12) {
+                Label(failure.message.isEmpty ? String(localized: "Не отправлено") : failure.message,
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                Button("Повторить") { model.retryChat(sessionID: sessionID) }
+                    .font(.caption.weight(.semibold))
+                    .disabled(model.state != .connected || model.sendingChats.contains(sessionID) || failure.text.isEmpty)
+                Button("Убрать", role: .destructive) { model.discardChatFailure(sessionID: sessionID) }
+                    .font(.caption.weight(.semibold))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
 
@@ -614,9 +711,15 @@ struct NewMobileChatView: View {
                         }
                     }
                 }
-                Section("Первая задача или сообщение") {
+                Section {
                     TextField("Что нужно сделать?", text: $text, axis: .vertical)
                         .lineLimit(5...12)
+                } header: {
+                    Text("Первая задача или сообщение")
+                } footer: {
+                    if let error = model.createChatError {
+                        Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    }
                 }
             }
             .navigationTitle("Новый диалог")
@@ -630,7 +733,10 @@ struct NewMobileChatView: View {
                     .disabled(model.creatingChat || projectPath.isEmpty || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .onAppear { if projectPath.isEmpty { projectPath = model.snapshot.projects.first?.path ?? "" } }
+            .onAppear {
+                model.createChatError = nil
+                if projectPath.isEmpty { projectPath = model.snapshot.projects.first?.path ?? "" }
+            }
             .onChange(of: model.createdSessionID) { _, id in if id != nil { dismiss() } }
         }
     }
@@ -663,6 +769,7 @@ private struct QuestionCard: View {
         }
         .padding(18)
         .mobileGlassCard(radius: 20)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
 }
@@ -672,6 +779,7 @@ struct QuestionView: View {
     let question: PingviQuestion
     @State private var answer = ""
     @State private var fieldAnswers: [String: String] = [:]
+    @State private var multiAnswers: [String: Set<String>] = [:]
 
     var current: PingviQuestion? {
         model.snapshot.questions.first { $0.id == question.id && $0.token == question.token }
@@ -686,6 +794,9 @@ struct QuestionView: View {
                 }
             } header: {
                 Text(question.agent + " · " + question.source)
+            }
+            if let failure = model.replyFailures[question.id] {
+                Section { ReplyFailureRow(sessionID: question.id, failure: failure) }
             }
             if !question.options.isEmpty {
                 Section("Быстрый ответ") {
@@ -705,13 +816,17 @@ struct QuestionView: View {
             }
             ForEach(question.fields) { field in
                 if !field.options.isEmpty {
-                    Section(field.label) {
-                        Picker("Ответ", selection: Binding(
-                            get: { fieldAnswers[field.id] ?? "" },
-                            set: { fieldAnswers[field.id] = $0 }
-                        )) {
-                            Text("Не выбрано").tag("")
-                            ForEach(field.options) { option in Text(option.label).tag(option.label) }
+                    if field.allowsMultiple {
+                        multiSelectSection(field)
+                    } else {
+                        Section(field.label) {
+                            Picker("Ответ", selection: Binding(
+                                get: { fieldAnswers[field.id] ?? "" },
+                                set: { fieldAnswers[field.id] = $0 }
+                            )) {
+                                Text("Не выбрано").tag("")
+                                ForEach(field.options) { option in Text(option.label).tag(option.label) }
+                            }
                         }
                     }
                 }
@@ -720,7 +835,7 @@ struct QuestionView: View {
                 TextField("Продиктуйте или введите ответ", text: $answer, axis: .vertical)
                     .lineLimit(2...6)
                 Button(model.replyingSessions.contains(question.id) ? "Отправляем…" : "Отправить") { submit(answer: answer) }
-                    .disabled(!canSubmit || (answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && fieldAnswers.values.allSatisfy(\.isEmpty)))
+                    .disabled(!canSubmit || (answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && collectedFieldAnswers.isEmpty))
             }
             if current == nil {
                 Text("Вопрос уже закрыт или изменился.").foregroundStyle(.secondary)
@@ -731,8 +846,45 @@ struct QuestionView: View {
         }
         .scrollContentBackground(.hidden)
         .background { MobileAmbientBackground() }
+        .mobileConnectionBanner()
         .navigationTitle(question.title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
+    }
+
+    private func multiSelectSection(_ field: PingviQuestionField) -> some View {
+        Section {
+            ForEach(field.options) { option in
+                let selected = multiAnswers[field.id, default: []].contains(option.label)
+                Button {
+                    MobileHaptics.selection()
+                    if selected { multiAnswers[field.id, default: []].remove(option.label) }
+                    else { multiAnswers[field.id, default: []].insert(option.label) }
+                } label: {
+                    HStack {
+                        Text(option.label).foregroundStyle(.primary)
+                        Spacer()
+                        Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(selected ? MobilePalette.accent : .secondary)
+                    }
+                }
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+        } header: {
+            Text(field.label)
+        } footer: {
+            Text("Можно выбрать несколько вариантов")
+        }
+    }
+
+    private var collectedFieldAnswers: [String: String] {
+        var result = fieldAnswers.filter { !$0.value.isEmpty }
+        for field in question.fields where field.allowsMultiple {
+            let joined = MobileReplyBuilder.joined(Array(multiAnswers[field.id, default: []]), in: field)
+            if !joined.isEmpty { result[field.id] = joined }
+        }
+        return result
     }
 
     private var canSubmit: Bool {
@@ -744,7 +896,7 @@ struct QuestionView: View {
             sessionID: question.id,
             questionToken: question.token,
             answer: value.trimmingCharacters(in: .whitespacesAndNewlines),
-            fieldAnswers: fieldAnswers.filter { !$0.value.isEmpty }
+            fieldAnswers: collectedFieldAnswers
         ))
     }
 }
@@ -758,6 +910,22 @@ struct MobileSettingsView: View {
 
     var body: some View {
         Form {
+            Section {
+                LabeledContent("Mac", value: model.pairing?.peerName ?? String(localized: "Не подключён"))
+                LabeledContent("Состояние", value: model.state.description)
+                if let fingerprint = model.pairing?.fingerprint {
+                    LabeledContent("Отпечаток", value: fingerprint)
+                }
+                Button("Забыть Mac…", role: .destructive) { confirmForget = true }
+            } header: {
+                Text("Подключение").accessibilityAddTraits(.isHeader)
+            }
+            Section("Уведомления") {
+                Toggle("Показывать текст вопроса", isOn: $fullPreviews)
+                Text("По умолчанию на заблокированном экране показывается только факт нового вопроса.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Section("Тема интерфейса") {
                 Picker("Тема", selection: $theme) {
                     ForEach(MobileTheme.allCases) { item in
@@ -793,7 +961,7 @@ struct MobileSettingsView: View {
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                                     .multilineTextAlignment(.center)
-                                    .frame(height: 30)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                             .frame(maxWidth: .infinity)
                             .padding(10)
@@ -805,27 +973,21 @@ struct MobileSettingsView: View {
                     }
                 }
                 .padding(.vertical, 4)
-                Text("iOS попросит подтвердить смену иконки. Выбор сохраняется после перезапуска.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Подключение") {
-                LabeledContent("Mac", value: model.pairing?.peerName ?? "Не подключён")
-                LabeledContent("Состояние", value: model.state.description)
-                if let fingerprint = model.pairing?.fingerprint {
-                    LabeledContent("Отпечаток", value: fingerprint)
+                if let error = appearance.errorMessage {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                } else {
+                    Text("iOS попросит подтвердить смену иконки. Выбор сохраняется после перезапуска.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                Button("Забыть Mac…", role: .destructive) { confirmForget = true }
-            }
-            Section("Уведомления") {
-                Toggle("Показывать текст вопроса", isOn: $fullPreviews)
-                Text("По умолчанию на заблокированном экране показывается только факт нового вопроса.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
             Section("Диагностика") {
-                Button("Скопировать диагностику") { UIPasteboard.general.string = model.diagnostics() }
+                Button("Скопировать диагностику") {
+                    UIPasteboard.general.string = model.diagnostics()
+                    model.showToast(String(localized: "Диагностика скопирована"), style: .success)
+                }
                 Text("Тексты вопросов, ответы и ключи не включаются.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -837,18 +999,12 @@ struct MobileSettingsView: View {
         }
         .scrollContentBackground(.hidden)
         .background { MobileAmbientBackground() }
+        .mobileConnectionBanner()
         .navigationTitle("Настройки")
+        .toolbar(.hidden, for: .navigationBar)
         .alert("Забыть Mac?", isPresented: $confirmForget) {
             Button("Забыть", role: .destructive) { model.forgetMac() }
             Button("Отмена", role: .cancel) {}
         } message: { Text("Для повторного подключения потребуется новый QR-код.") }
-        .alert("Иконка", isPresented: Binding(
-            get: { appearance.errorMessage != nil },
-            set: { if !$0 { appearance.errorMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) { appearance.errorMessage = nil }
-        } message: {
-            Text(appearance.errorMessage ?? "")
-        }
     }
 }

@@ -58,4 +58,22 @@ final class MobileReplyTests: XCTestCase {
         XCTAssertEqual(reply.answer, "2")
         XCTAssertTrue(reply.fieldAnswers.isEmpty)
     }
+
+    func testMultiSelectAnswerUsesMacSeparatorAndOptionOrder() {
+        let field = PingviQuestionField(
+            id: "layers", label: "Слои",
+            options: [PingviOption(id: "UI", label: "UI"), PingviOption(id: "API", label: "API"), PingviOption(id: "DB", label: "DB")],
+            allowsMultiple: true
+        )
+
+        XCTAssertEqual(MobileReplyBuilder.joined(["DB", "UI"], in: field), "UI, DB")
+        XCTAssertEqual(MobileReplyBuilder.joined([], in: field), "")
+    }
+
+    func testSyncTextDescribesFreshAndMissingSnapshots() {
+        let now = Date(timeIntervalSince1970: 10_000)
+        XCTAssertNil(MobileSyncText.updated(nil, now: now))
+        XCTAssertEqual(MobileSyncText.updated(now.addingTimeInterval(-20), now: now), "обновлено только что")
+        XCTAssertNotNil(MobileSyncText.updated(now.addingTimeInterval(-600), now: now))
+    }
 }

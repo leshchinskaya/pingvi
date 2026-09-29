@@ -37,7 +37,7 @@ final class PhoneWatchBridge: NSObject, WCSessionDelegate {
     ) {
         guard let data = message["reply"] as? Data,
               let reply = try? JSONDecoder().decode(PingviReply.self, from: data) else {
-            replyHandler(["message": "Некорректный ответ"])
+            replyHandler(["message": String(localized: "Некорректный ответ")])
             return
         }
         onReply?(reply) { message in replyHandler(["message": message]) }

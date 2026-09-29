@@ -246,4 +246,23 @@ final class PingviLinkTests: XCTestCase {
         client.createChat(PingviCreateChatRequest(agent: "codex", projectPath: "/Projects/Pingvi", text: "Start"), commandID: "create-command")
         wait(for: [createReceived, createResultReceived], timeout: 5)
     }
+
+    func testSessionStatusParsesKnownValuesAndFallsBackForNewOnes() {
+        XCTAssertEqual(PingviSessionStatus(rawStatus: "done"), .done)
+        XCTAssertEqual(PingviSessionStatus(rawStatus: "future-status"), .unknown)
+        XCTAssertTrue(PingviSessionStatus.unconfirmed.awaitsAnswer)
+        XCTAssertFalse(PingviSessionStatus.working.awaitsAnswer)
+        XCTAssertTrue(PingviSessionStatus.done.isUnreadResult)
+        XCTAssertFalse(PingviSessionStatus.viewed.isUnreadResult)
+    }
+
+    func testSessionSummaryKeepsStringStatusOnTheWire() throws {
+        let summary = PingviSessionSummary(
+            id: "s", title: "T", project: "P", projectPath: "/P", agent: "codex",
+            source: "herdr", status: "working", preview: "", updatedAt: Date(timeIntervalSince1970: 0)
+        )
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(summary)) as? [String: Any]
+        XCTAssertEqual(json?["status"] as? String, "working")
+        XCTAssertEqual(summary.sessionStatus, .working)
+    }
 }

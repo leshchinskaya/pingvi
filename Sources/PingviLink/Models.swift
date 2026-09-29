@@ -9,7 +9,7 @@ public enum PingviProtocol {
     public static let maximumConversationMessages = 100
 }
 
-public struct PingviOption: Codable, Equatable, Identifiable, Sendable {
+public struct PingviOption: Codable, Hashable, Identifiable, Sendable {
     public let id: String
     public let label: String
 
@@ -22,7 +22,7 @@ public struct PingviOption: Codable, Equatable, Identifiable, Sendable {
     public var replyValue: String { id }
 }
 
-public struct PingviQuestionField: Codable, Equatable, Identifiable, Sendable {
+public struct PingviQuestionField: Codable, Hashable, Identifiable, Sendable {
     public let id: String
     public let label: String
     public let options: [PingviOption]
@@ -42,7 +42,7 @@ public enum PingviQuestionState: String, Codable, Sendable {
     case unconfirmed
 }
 
-public struct PingviQuestion: Codable, Equatable, Identifiable, Sendable {
+public struct PingviQuestion: Codable, Hashable, Identifiable, Sendable {
     public let id: String
     public let token: String
     public let title: String
@@ -117,7 +117,7 @@ public struct PingviProject: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
-public struct PingviSessionSummary: Codable, Equatable, Identifiable, Sendable {
+public struct PingviSessionSummary: Codable, Hashable, Identifiable, Sendable {
     public let id: String
     public let title: String
     public let project: String
@@ -149,6 +149,35 @@ public struct PingviSessionSummary: Codable, Equatable, Identifiable, Sendable {
         self.preview = String(preview.prefix(1_024))
         self.updatedAt = updatedAt
     }
+}
+
+/// Typed view of `PingviSessionSummary.status`. The wire format stays a string so
+/// older clients and newer Mac statuses keep decoding; unknown values map to `.unknown`.
+public enum PingviSessionStatus: String, CaseIterable, Sendable {
+    case waiting
+    case checking
+    case unconfirmed
+    case working
+    case done
+    case viewed
+    case offline
+    case unknown
+
+    public init(rawStatus: String) {
+        self = PingviSessionStatus(rawValue: rawStatus) ?? .unknown
+    }
+
+    /// The session has a question that still needs the user's attention.
+    public var awaitsAnswer: Bool {
+        self == .waiting || self == .checking || self == .unconfirmed
+    }
+
+    /// A finished result the user has not opened yet.
+    public var isUnreadResult: Bool { self == .done }
+}
+
+extension PingviSessionSummary {
+    public var sessionStatus: PingviSessionStatus { PingviSessionStatus(rawStatus: status) }
 }
 
 public enum PingviChatRole: String, Codable, Sendable {

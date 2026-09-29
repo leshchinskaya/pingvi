@@ -20,6 +20,11 @@ enum MobileReplyBuilder {
         fields["text"] = reply.answer.trimmingCharacters(in: .whitespacesAndNewlines)
         return PingviReply(sessionID: reply.sessionID, questionToken: reply.questionToken, answer: "", fieldAnswers: fields)
     }
+
+    /// Multi-select answers use the same ", " separator the Mac card writes and parses.
+    static func joined(_ selection: [String], in field: PingviQuestionField) -> String {
+        field.options.map(\.label).filter(selection.contains).joined(separator: ", ")
+    }
 }
 
 enum MobileSnapshotUpdater {
@@ -34,11 +39,11 @@ enum MobileSnapshotUpdater {
                 agent: session.agent,
                 source: session.source,
                 status: conversation.status,
-                preview: conversation.status == "viewed" ? "Результат просмотрен" : session.preview,
+                preview: PingviSessionStatus(rawStatus: conversation.status) == .viewed ? String(localized: "Результат просмотрен") : session.preview,
                 updatedAt: session.updatedAt
             )
         }
-        let completions = conversation.status == "viewed"
+        let completions = PingviSessionStatus(rawStatus: conversation.status) == .viewed
             ? snapshot.completions.filter { $0.id != conversation.sessionID }
             : snapshot.completions
         return PingviSnapshot(
@@ -67,7 +72,14 @@ final class MobileAppModel: ObservableObject {
     @Published private(set) var markingReadSessions: Set<String> = []
     @Published private(set) var creatingChat = false
     @Published var createdSessionID: String?
+    @Published var createChatError: String?
+    /// Blocking problems that need a decision (pairing). Everything else goes to toasts or inline errors.
     @Published var errorMessage: String?
+    @Published private(set) var toast: MobileToast?
+    @Published private(set) var lastSyncAt: Date?
+    @Published private(set) var replyFailures: [String: MobileReplyFailure] = [:]
+    @Published private(set) var chatFailures: [String: MobileChatFailure] = [:]
+    @Published private(set) var conversationErrors: [String: String] = [:]
 
     let watch = PhoneWatchBridge()
     private let keychain = PingviKeychain(service: "app.pingvi.mobile.link")
@@ -75,6 +87,9 @@ final class MobileAppModel: ObservableObject {
     private let cacheURL: URL
     private let logger = Logger(subsystem: "app.pingvi.mobile", category: "Link")
     private var replySessionsByCommand: [String: String] = [:]
+    private var repliesByCommand: [String: PingviReply] = [:]
+    private var chatTextsBySession: [String: String] = [:]
+    private static let lastSyncKey = "lastSnapshotAt"
 
     private init() {
         let saved = keychain.codable(StoredMobileIdentity.self, for: "identity")
@@ -95,13 +110,15 @@ final class MobileAppModel: ObservableObject {
            let cached = try? JSONDecoder().decode(PingviSnapshot.self, from: data) {
             snapshot = cached
         }
+        lastSyncAt = UserDefaults.standard.object(forKey: Self.lastSyncKey) as? Date
         configureClient()
 #if DEBUG
         if MobileDocumentationPreview.isEnabled {
             self.pairing = MobileDocumentationPreview.pairing
             self.snapshot = MobileDocumentationPreview.snapshot
             self.conversations = MobileDocumentationPreview.delaysConversationFixture ? [:] : MobileDocumentationPreview.conversations
-            self.state = .connected
+            self.state = MobileDocumentationPreview.simulatesOffline ? .disconnected("Mac недоступен") : .connected
+            self.lastSyncAt = Date().addingTimeInterval(MobileDocumentationPreview.simulatesOffline ? -300 : 0)
             if MobileDocumentationPreview.delaysConversationFixture {
                 Task { @MainActor [weak self] in
                     try? await Task.sleep(for: .milliseconds(300))
@@ -131,6 +148,24 @@ final class MobileAppModel: ObservableObject {
         else if pairing != nil { client.start() }
     }
 
+    /// Manual retry from the connection banner.
+    func reconnect() {
+#if DEBUG
+        if MobileDocumentationPreview.isEnabled { return }
+#endif
+        guard pairing != nil, state != .connected else { return activate() }
+        client.start()
+    }
+
+    func showToast(_ text: String, style: MobileToast.Style = .info) {
+        toast = MobileToast(text: text, style: style)
+        if style == .failure { MobileHaptics.warning() }
+    }
+
+    func dismissToast(_ id: UUID) {
+        if toast?.id == id { toast = nil }
+    }
+
     func enteredBackground() {
         // Keep the connection alive only for the background time iOS grants naturally.
         watch.update(snapshot: snapshot, connection: state)
@@ -148,18 +183,26 @@ final class MobileAppModel: ObservableObject {
     @discardableResult
     func send(_ reply: PingviReply) -> String {
         guard state == .connected else {
-            errorMessage = "Ответ можно отправить только при активном соединении с Mac."
-            return "Mac недоступен"
+            showToast(String(localized: "Ответ можно отправить только при связи с Mac."), style: .failure)
+            return String(localized: "Mac недоступен")
         }
         guard let question = snapshot.questions.first(where: { $0.id == reply.sessionID && $0.token == reply.questionToken && $0.canReply }) else {
-            errorMessage = "Вопрос уже изменился или больше не принимает ответы."
-            return "Вопрос устарел"
+            replyFailures[reply.sessionID] = nil
+            showToast(String(localized: "Вопрос уже закрыт или изменился."), style: .failure)
+            return String(localized: "Вопрос устарел")
         }
         let commandID = client.sendReply(MobileReplyBuilder.normalized(reply, for: question))
         replySessionsByCommand[commandID] = reply.sessionID
+        repliesByCommand[commandID] = reply
+        replyFailures[reply.sessionID] = nil
         replyingSessions.insert(reply.sessionID)
-        commandResults[commandID] = PingviReplyResult(commandID: commandID, status: .checking, message: "Отправляем…")
-        return "Отправляем…"
+        commandResults[commandID] = PingviReplyResult(commandID: commandID, status: .checking, message: String(localized: "Отправляем…"))
+        return String(localized: "Отправляем…")
+    }
+
+    func retryReply(sessionID: String) {
+        guard let failure = replyFailures[sessionID] else { return }
+        send(failure.reply)
     }
 
     func forgetMac() {
@@ -173,6 +216,14 @@ final class MobileAppModel: ObservableObject {
         loadingConversations = []
         sendingChats = []
         markingReadSessions = []
+        replyFailures = [:]
+        chatFailures = [:]
+        conversationErrors = [:]
+        repliesByCommand = [:]
+        chatTextsBySession = [:]
+        lastSyncAt = nil
+        UserDefaults.standard.removeObject(forKey: Self.lastSyncKey)
+        MobileRouter.shared.reset()
         try? keychain.remove("paired-mac")
         try? FileManager.default.removeItem(at: cacheURL)
         watch.update(snapshot: snapshot, connection: .stopped)
@@ -180,20 +231,23 @@ final class MobileAppModel: ObservableObject {
 
     func loadConversation(sessionID: String, force: Bool = false) {
         guard state == .connected else {
-            if conversations[sessionID] == nil { errorMessage = "Историю можно загрузить только при активном соединении с Mac." }
+            if conversations[sessionID] == nil {
+                conversationErrors[sessionID] = String(localized: "Переписка загрузится, когда появится связь с Mac.")
+            }
             return
         }
         guard force || (conversations[sessionID] == nil && !loadingConversations.contains(sessionID)) else { return }
+        conversationErrors[sessionID] = nil
         loadingConversations.insert(sessionID)
         _ = client.requestConversation(sessionID: sessionID)
     }
 
     func markConversationRead(sessionID: String) {
         guard state == .connected else {
-            errorMessage = "Диалог можно отметить прочитанным только при активном соединении с Mac."
+            showToast(String(localized: "Отметить прочитанным можно только при связи с Mac."), style: .failure)
             return
         }
-        guard snapshot.sessions.contains(where: { $0.id == sessionID && $0.status == "done" }),
+        guard snapshot.sessions.contains(where: { $0.id == sessionID && $0.sessionStatus.isUnreadResult }),
               !markingReadSessions.contains(sessionID) else { return }
         markingReadSessions.insert(sessionID)
         loadConversation(sessionID: sessionID, force: true)
@@ -202,13 +256,19 @@ final class MobileAppModel: ObservableObject {
     func sendChat(sessionID: String, text: String) {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard state == .connected else {
-            errorMessage = "Сообщение можно отправить только при активном соединении с Mac."
+            chatFailures[sessionID] = MobileChatFailure(text: text, message: String(localized: "Нет связи с Mac"))
             return
         }
         guard let conversation = conversations[sessionID], conversation.canSend, !text.isEmpty else {
-            errorMessage = conversations[sessionID]?.reason ?? "Диалог сейчас не принимает сообщения."
+            let reason = conversations[sessionID]?.reason ?? ""
+            chatFailures[sessionID] = MobileChatFailure(
+                text: text,
+                message: reason.isEmpty ? String(localized: "Диалог сейчас не принимает сообщения") : reason
+            )
             return
         }
+        chatFailures[sessionID] = nil
+        chatTextsBySession[sessionID] = text
         sendingChats.insert(sessionID)
         _ = client.sendChat(PingviChatSendRequest(
             sessionID: sessionID,
@@ -217,13 +277,23 @@ final class MobileAppModel: ObservableObject {
         ))
     }
 
+    func retryChat(sessionID: String) {
+        guard let failure = chatFailures[sessionID] else { return }
+        sendChat(sessionID: sessionID, text: failure.text)
+    }
+
+    func discardChatFailure(sessionID: String) {
+        chatFailures[sessionID] = nil
+    }
+
     func createChat(agent: String, projectPath: String, text: String) {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard state == .connected else {
-            errorMessage = "Новый диалог можно создать только при активном соединении с Mac."
+            createChatError = String(localized: "Новый диалог можно создать только при связи с Mac.")
             return
         }
         guard !projectPath.isEmpty, !text.isEmpty, !creatingChat else { return }
+        createChatError = nil
         creatingChat = true
         createdSessionID = nil
         _ = client.createChat(PingviCreateChatRequest(agent: agent, projectPath: projectPath, text: text))
@@ -274,8 +344,11 @@ final class MobileAppModel: ObservableObject {
             let oldTokens = Set(snapshot.questions.map(\.token))
             let oldCompletions = Set(snapshot.completions.map(\.id))
             snapshot = incoming
+            recordSync()
             let availableSessions = Set(incoming.sessions.map(\.id))
             conversations = conversations.filter { availableSessions.contains($0.key) }
+            let openTokens = Set(incoming.questions.map(\.token))
+            replyFailures = replyFailures.filter { openTokens.contains($0.value.reply.questionToken) }
             logger.debug("Received revision \(incoming.revision, privacy: .public), pending \(incoming.questions.count, privacy: .public)")
             persist(incoming)
             for question in incoming.questions where !oldTokens.contains(question.token) {
@@ -288,12 +361,22 @@ final class MobileAppModel: ObservableObject {
         case .replyResult:
             if let result = message.replyResult {
                 commandResults[result.commandID] = result
+                let reply = repliesByCommand[result.commandID]
                 if !result.status.keepsSubmissionPending,
                    let sessionID = replySessionsByCommand.removeValue(forKey: result.commandID) {
                     replyingSessions.remove(sessionID)
+                    repliesByCommand[result.commandID] = nil
                 }
-                if result.status == .failed || result.status == .stale || result.status == .unavailable || result.status == .uncertain {
-                    errorMessage = result.message
+                switch result.status {
+                case .failed, .unavailable, .uncertain:
+                    if let reply { replyFailures[reply.sessionID] = MobileReplyFailure(reply: reply, message: result.message) }
+                    MobileHaptics.warning()
+                case .stale:
+                    showToast(result.message, style: .failure)
+                case .checking:
+                    MobileHaptics.success()
+                default:
+                    break
                 }
             }
         case .conversation:
@@ -301,18 +384,23 @@ final class MobileAppModel: ObservableObject {
             loadingConversations.remove(response.sessionID)
             markingReadSessions.remove(response.sessionID)
             if let conversation = response.conversation {
+                conversationErrors[response.sessionID] = nil
                 conversations[response.sessionID] = conversation
                 snapshot = MobileSnapshotUpdater.recording(conversation, in: snapshot)
                 persist(snapshot)
                 watch.update(snapshot: snapshot, connection: state)
             } else if let error = response.error {
-                errorMessage = error
+                conversationErrors[response.sessionID] = error
             }
         case .chatSendResult:
             guard let result = message.chatSendResult else { return }
             sendingChats.remove(result.sessionID)
+            let text = chatTextsBySession.removeValue(forKey: result.sessionID) ?? ""
             if result.status == .failed || result.status == .stale || result.status == .uncertain {
-                errorMessage = result.message
+                chatFailures[result.sessionID] = MobileChatFailure(text: text, message: result.message)
+                MobileHaptics.warning()
+            } else {
+                MobileHaptics.success()
             }
             loadConversation(sessionID: result.sessionID, force: true)
         case .createChatResult:
@@ -322,11 +410,17 @@ final class MobileAppModel: ObservableObject {
                 createdSessionID = session.id
                 client.requestSnapshot()
             } else {
-                errorMessage = result.error ?? "Не удалось создать диалог."
+                createChatError = result.error ?? String(localized: "Не удалось создать диалог.")
             }
         default:
             break
         }
+    }
+
+    private func recordSync() {
+        let now = Date()
+        lastSyncAt = now
+        UserDefaults.standard.set(now, forKey: Self.lastSyncKey)
     }
 
     private func persist(_ value: PingviSnapshot) {
@@ -335,6 +429,6 @@ final class MobileAppModel: ObservableObject {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             let data = try JSONEncoder().encode(value)
             try data.write(to: cacheURL, options: [.atomic, .completeFileProtection])
-        } catch { errorMessage = "Кэш: \(error.localizedDescription)" }
+        } catch { logger.error("Snapshot cache write failed: \(error.localizedDescription, privacy: .public)") }
     }
 }

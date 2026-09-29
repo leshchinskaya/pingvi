@@ -68,18 +68,18 @@ final class MobileNotifications {
             }
             actions.append(UNTextInputNotificationAction(
                 identifier: "text",
-                title: "Ответить",
+                title: String(localized: "Ответить"),
                 options: [],
-                textInputButtonTitle: "Отправить",
-                textInputPlaceholder: "Короткий ответ"
+                textInputButtonTitle: String(localized: "Отправить"),
+                textInputPlaceholder: String(localized: "Короткий ответ")
             ))
         }
         categories[categoryID] = UNNotificationCategory(
             identifier: categoryID,
             actions: actions,
             intentIdentifiers: [],
-            hiddenPreviewsBodyPlaceholder: "Агент ждёт ответа",
-            categorySummaryFormat: "%u вопросов",
+            hiddenPreviewsBodyPlaceholder: String(localized: "Агент ждёт ответа"),
+            categorySummaryFormat: String(localized: "%u вопросов"),
             options: [.hiddenPreviewsShowTitle]
         )
         center.setNotificationCategories(Set(categories.values))
@@ -87,7 +87,7 @@ final class MobileNotifications {
         let content = UNMutableNotificationContent()
         content.title = question.title
         content.subtitle = question.agent + " · " + question.source
-        content.body = UserDefaults.standard.bool(forKey: "fullNotificationPreviews") ? question.question : "Агент ждёт ответа"
+        content.body = UserDefaults.standard.bool(forKey: "fullNotificationPreviews") ? question.question : String(localized: "Агент ждёт ответа")
         content.sound = .default
         content.threadIdentifier = question.id
         content.categoryIdentifier = categoryID
@@ -103,7 +103,7 @@ final class MobileNotifications {
         let content = UNMutableNotificationContent()
         content.title = completion.title
         content.subtitle = completion.agent + " · " + completion.source
-        content.body = "Агент закончил ответ"
+        content.body = String(localized: "Агент закончил ответ")
         content.sound = .default
         content.threadIdentifier = completion.id
         center.add(UNNotificationRequest(identifier: "done:\(completion.id):\(completion.completedAt.timeIntervalSince1970)", content: content, trigger: nil))

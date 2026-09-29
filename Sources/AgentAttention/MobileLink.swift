@@ -165,7 +165,7 @@ final class MacMobileLink: ObservableObject, @unchecked Sendable {
         let questions = store.pending.compactMap { session -> PingviQuestion? in
             guard let state = PingviQuestionState(rawValue: session.status) else { return nil }
             let arrival = store.local.arrival[session.token].map(Date.init(timeIntervalSince1970:)) ?? Date(timeIntervalSince1970: session.updated)
-            let mobileCanReply = session.canReply && state == .waiting && !session.fields.contains(where: \.multi)
+            let mobileCanReply = session.canReply && state == .waiting
             return PingviQuestion(
                 id: session.id,
                 token: session.token,
@@ -417,7 +417,7 @@ final class MacMobileLink: ObservableObject, @unchecked Sendable {
             completion(PingviReplyResult(commandID: commandID, status: .stale, message: "Вопрос уже изменился."))
             return
         }
-        guard session.status == "waiting", session.canReply, !session.fields.contains(where: \.multi) else {
+        guard session.status == "waiting", session.canReply else {
             completion(PingviReplyResult(commandID: commandID, status: .unavailable, message: "Этот вопрос сейчас нельзя отправить."))
             return
         }

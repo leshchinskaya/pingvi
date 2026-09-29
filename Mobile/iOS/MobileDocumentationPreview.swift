@@ -20,6 +20,10 @@ enum MobileDocumentationPreview {
         ProcessInfo.processInfo.arguments.contains("--ui-test-delayed-conversation")
     }
 
+    static var simulatesOffline: Bool {
+        ProcessInfo.processInfo.arguments.contains("--ui-test-offline")
+    }
+
     static var isEnabled: Bool {
         ProcessInfo.processInfo.arguments.contains("--documentation-preview")
     }
@@ -34,11 +38,11 @@ enum MobileDocumentationPreview {
         return screen
     }
 
-    static var initialTab: Int {
+    static var initialTab: MobileTab {
         switch screen {
-        case .queue, .conversation: return 0
-        case .dialogs: return 1
-        case .appearance: return 2
+        case .queue, .conversation: return .queue
+        case .dialogs: return .dialogs
+        case .appearance: return .settings
         }
     }
 

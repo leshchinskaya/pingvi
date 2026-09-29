@@ -6,6 +6,7 @@ struct PingviMobileApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var model = MobileAppModel.shared
     @StateObject private var appearance = MobileAppearance.shared
+    @StateObject private var router = MobileRouter.shared
     @AppStorage("appTheme") private var theme = MobileTheme.system.rawValue
 
     var body: some Scene {
@@ -13,6 +14,7 @@ struct PingviMobileApp: App {
             MobileRootView()
                 .environmentObject(model)
                 .environmentObject(appearance)
+                .environmentObject(router)
                 .environment(\.locale, documentationLocale)
                 .preferredColorScheme(MobileTheme(rawValue: theme)?.colorScheme)
                 .tint(MobilePalette.accent)

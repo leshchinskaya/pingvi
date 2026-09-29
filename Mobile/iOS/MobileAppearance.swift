@@ -10,9 +10,9 @@ enum MobileTheme: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .system: return "Как в iOS"
-        case .light: return "Светлая"
-        case .dark: return "Тёмная"
+        case .system: return String(localized: "Как в iOS")
+        case .light: return String(localized: "Светлая")
+        case .dark: return String(localized: "Тёмная")
         }
     }
 
@@ -38,21 +38,21 @@ enum MobileIconMood: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .ice: return "Лёд"
-        case .night: return "Ночь"
-        case .aurora: return "Аврора"
-        case .orbit: return "Орбита"
-        case .classic: return "Классика"
+        case .ice: return String(localized: "Лёд")
+        case .night: return String(localized: "Ночь")
+        case .aurora: return String(localized: "Аврора")
+        case .orbit: return String(localized: "Орбита")
+        case .classic: return String(localized: "Классика")
         }
     }
 
     var caption: String {
         switch self {
-        case .ice: return "Геометрия и ясность"
-        case .night: return "Графит и серебро"
-        case .aurora: return "Свет и стекло"
-        case .orbit: return "Движение и энергия"
-        case .classic: return "Первый пингвин"
+        case .ice: return String(localized: "Геометрия и ясность")
+        case .night: return String(localized: "Графит и серебро")
+        case .aurora: return String(localized: "Свет и стекло")
+        case .orbit: return String(localized: "Движение и энергия")
+        case .classic: return String(localized: "Первый пингвин")
         }
     }
 
@@ -76,15 +76,16 @@ final class MobileAppearance: ObservableObject {
     func select(_ mood: MobileIconMood) {
         let application = UIApplication.shared
         guard application.supportsAlternateIcons else {
-            errorMessage = "Эта версия iOS не поддерживает смену иконки."
+            errorMessage = String(localized: "Эта версия iOS не поддерживает смену иконки.")
             return
         }
         guard selectedIcon != mood else { return }
+        errorMessage = nil
 
         application.setAlternateIconName(mood.alternateIconName) { [weak self] error in
             Task { @MainActor in
                 if let error {
-                    self?.errorMessage = "Не удалось изменить иконку: \(error.localizedDescription)"
+                    self?.errorMessage = String(localized: "Не удалось изменить иконку: \(error.localizedDescription)")
                 } else {
                     self?.selectedIcon = mood
                 }
