@@ -24,6 +24,10 @@ enum MobileDocumentationPreview {
         ProcessInfo.processInfo.arguments.contains("--ui-test-offline")
     }
 
+    static var presentsQuestion: Bool {
+        ProcessInfo.processInfo.arguments.contains("--ui-test-question-sheet")
+    }
+
     static var isEnabled: Bool {
         ProcessInfo.processInfo.arguments.contains("--documentation-preview")
     }

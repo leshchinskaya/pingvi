@@ -15,6 +15,7 @@ struct PingviMobileApp: App {
                 .environmentObject(model)
                 .environmentObject(appearance)
                 .environmentObject(router)
+                .environmentObject(model.undo)
                 .environment(\.locale, documentationLocale)
                 .preferredColorScheme(MobileTheme(rawValue: theme)?.colorScheme)
                 .tint(MobilePalette.accent)

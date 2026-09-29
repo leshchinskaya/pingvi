@@ -16,6 +16,33 @@ private struct PendingMobileReply {
     let token: String
 }
 
+enum MobileCompletionSummary {
+    static let fallback = "Агент закончил ответ."
+
+    /// Compact one-paragraph preview of the agent's last answer for the phone's result card.
+    static func preview(from answer: String?, limit: Int = 280) -> String {
+        var inCode = false
+        let lines = (answer ?? "")
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { line in
+                if line.hasPrefix("```") { inCode.toggle(); return false }
+                return !inCode && !line.isEmpty
+            }
+            .map { line in
+                var line = line
+                while let first = line.first, "#>*-".contains(first) { line.removeFirst() }
+                return line.replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "`", with: "")
+                    .trimmingCharacters(in: .whitespaces)
+            }
+            .filter { !$0.isEmpty }
+        let text = lines.joined(separator: " ")
+        guard !text.isEmpty else { return fallback }
+        guard text.count > limit else { return text }
+        return String(text.prefix(limit)).trimmingCharacters(in: .whitespaces) + "…"
+    }
+}
+
 final class MacMobileLink: ObservableObject, @unchecked Sendable {
     @Published private(set) var state: PingviConnectionState = .stopped
     @Published private(set) var pairedDevice: PingviPairingRecord?
@@ -27,6 +54,8 @@ final class MacMobileLink: ObservableObject, @unchecked Sendable {
     private let server: PingviLinkServer?
     private var revision: UInt64 = 0
     private var pending: [String: PendingMobileReply] = [:]
+    private var completionSummaries: [String: String] = [:]
+    private var loadingSummaries: Set<String> = []
     private let isPreview: Bool
     private let logger = Logger(subsystem: "app.pingvi.mac", category: "MobileLink")
 
@@ -189,13 +218,16 @@ final class MacMobileLink: ObservableObject, @unchecked Sendable {
                 arrivedAt: arrival
             )
         }
-        let completions = store.visible.filter { $0.status == "done" }.map { session in
+        let done = store.visible.filter { $0.status == "done" }
+        let summaryKeys = Set(done.map(summaryKey))
+        completionSummaries = completionSummaries.filter { summaryKeys.contains($0.key) }
+        let completions = done.map { session in
             PingviCompletion(
                 id: session.id,
                 title: store.title(session),
                 agent: session.agent,
                 source: session.source,
-                summary: "Агент закончил ответ.",
+                summary: completionSummary(session),
                 completedAt: Date(timeIntervalSince1970: session.updated)
             )
         }
@@ -212,6 +244,26 @@ final class MacMobileLink: ObservableObject, @unchecked Sendable {
             sessions: sessions,
             projects: projects
         )
+    }
+
+    private func summaryKey(_ session: Session) -> String { "\(session.id):\(session.updated)" }
+
+    /// Returns the cached answer preview, loading it from history in the background on first use.
+    private func completionSummary(_ session: Session) -> String {
+        let key = summaryKey(session)
+        if let cached = completionSummaries[key] { return cached }
+        guard !isPreview, !loadingSummaries.contains(key) else { return MobileCompletionSummary.fallback }
+        loadingSummaries.insert(key)
+        Bridge.call(["action": "search-history", "session": ChatModel.payload(session)]) { [weak self] result in
+            guard let self else { return }
+            self.loadingSummaries.remove(key)
+            let answer = (try? result.get())
+                .flatMap { try? JSONDecoder().decode(SearchHistory.self, from: $0) }
+                .flatMap { CompletedResults.lastAnswer(in: $0.messages)?.text }
+            self.completionSummaries[key] = MobileCompletionSummary.preview(from: answer)
+            if answer != nil { self.storeDidChange() }
+        }
+        return MobileCompletionSummary.fallback
     }
 
     private func summary(_ session: Session) -> PingviSessionSummary {

@@ -8,7 +8,6 @@ enum MobileTab: Hashable {
 }
 
 enum MobileDestination: Hashable {
-    case question(PingviQuestion)
     case conversation(PingviSessionSummary)
 }
 
@@ -21,6 +20,8 @@ final class MobileRouter: ObservableObject {
     @Published var tab: MobileTab = .queue
     @Published var queuePath: [MobileDestination] = []
     @Published var dialogsPath: [MobileDestination] = []
+    /// Question shown in the answer sheet above whichever tab is active.
+    @Published var presentedQuestion: PingviQuestion?
 
     init() {
 #if DEBUG
@@ -29,6 +30,9 @@ final class MobileRouter: ObservableObject {
             if MobileDocumentationPreview.screen == .conversation,
                let session = MobileDocumentationPreview.snapshot.sessions.first(where: { $0.id == MobileDocumentationPreview.conversationSessionID }) {
                 queuePath = [.conversation(session)]
+            }
+            if MobileDocumentationPreview.presentsQuestion {
+                presentedQuestion = MobileDocumentationPreview.snapshot.questions.first
             }
         }
 #endif
@@ -54,7 +58,19 @@ final class MobileRouter: ObservableObject {
         self.tab = tab
     }
 
+    func present(_ question: PingviQuestion) {
+        presentedQuestion = question
+    }
+
+    /// Opens a question from outside the app: the queue tab underneath, the answer sheet on top.
+    func openQuestion(_ question: PingviQuestion) {
+        tab = .queue
+        queuePath = []
+        presentedQuestion = question
+    }
+
     func reset() {
+        presentedQuestion = nil
         tab = .queue
         queuePath = []
         dialogsPath = []

@@ -29,6 +29,14 @@ final class MobileAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificati
     ) {
         defer { completionHandler() }
         let info = response.notification.request.content.userInfo
+        if response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+           let sessionID = info["sessionID"] as? String {
+            let kind = info["kind"] as? String ?? "question"
+            Task { @MainActor [weak self] in
+                (self?.model ?? MobileAppModel.shared).openFromNotification(kind: kind, sessionID: sessionID)
+            }
+            return
+        }
         guard let sessionID = info["sessionID"] as? String,
               let token = info["token"] as? String else { return }
         var answer = ""
@@ -57,6 +65,11 @@ final class MobileNotifications {
 
     func requestAuthorization() {
         center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+    }
+
+    /// App icon badge mirrors the number of questions waiting in the last snapshot.
+    func updateBadge(count: Int) {
+        center.setBadgeCount(count) { _ in }
     }
 
     func show(question: PingviQuestion) {
@@ -92,6 +105,7 @@ final class MobileNotifications {
         content.threadIdentifier = question.id
         content.categoryIdentifier = categoryID
         content.userInfo = [
+            "kind": "question",
             "sessionID": question.id,
             "token": question.token,
             "options": question.options.map(\.replyValue)
@@ -106,6 +120,7 @@ final class MobileNotifications {
         content.body = String(localized: "Агент закончил ответ")
         content.sound = .default
         content.threadIdentifier = completion.id
+        content.userInfo = ["kind": "done", "sessionID": completion.id]
         center.add(UNNotificationRequest(identifier: "done:\(completion.id):\(completion.completedAt.timeIntervalSince1970)", content: content, trigger: nil))
     }
 }

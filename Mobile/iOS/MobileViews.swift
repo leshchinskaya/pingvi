@@ -33,19 +33,27 @@ extension EnvironmentValues {
 }
 
 private struct PairedRootView: View {
+    @EnvironmentObject private var model: MobileAppModel
     @EnvironmentObject private var router: MobileRouter
 
     var body: some View {
         TabView(selection: $router.tab) {
             QueueView()
                 .tabItem { Label("Очередь", systemImage: "tray.full") }
+                .badge(model.questions.count)
                 .tag(MobileTab.queue)
             DialogsView()
                 .tabItem { Label("Диалоги", systemImage: "bubble.left.and.bubble.right") }
+                .badge(model.unreadResultCount)
                 .tag(MobileTab.dialogs)
             NavigationStack { MobileSettingsView() }
                 .tabItem { Label("Настройки", systemImage: "gearshape") }
                 .tag(MobileTab.settings)
+        }
+        .sheet(item: $router.presentedQuestion) { question in
+            NavigationStack { QuestionView(question: question) }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
     }
 }
@@ -55,7 +63,6 @@ private struct MobileDestinationView: View {
 
     var body: some View {
         switch destination {
-        case .question(let question): QuestionView(question: question)
         case .conversation(let session): ConversationView(session: session)
         }
     }
@@ -79,6 +86,8 @@ private extension View {
 private struct MobileSectionHeader: View {
     let title: LocalizedStringKey
     var count: Int?
+    var actionTitle: LocalizedStringKey?
+    var action: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 8) {
@@ -95,6 +104,11 @@ private struct MobileSectionHeader: View {
                     .background(.quaternary, in: Capsule())
             }
             Spacer()
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .font(.subheadline.weight(.semibold))
+                    .buttonStyle(.borderless)
+            }
         }
         .textCase(nil)
         .padding(.horizontal, 4)
@@ -213,16 +227,8 @@ struct QueueView: View {
                         .mobileListRow()
                     } else {
                         ForEach(model.questions) { question in
-                            VStack(spacing: 8) {
-                                Button { router.push(.question(question), in: .queue) } label: {
-                                    QuestionCard(question: question)
-                                }
-                                .buttonStyle(.plain)
-                                if let failure = model.replyFailures[question.id] {
-                                    ReplyFailureRow(sessionID: question.id, failure: failure)
-                                }
-                            }
-                            .mobileListRow()
+                            QuestionRow(question: question)
+                                .mobileListRow()
                         }
                     }
                 } header: {
@@ -238,18 +244,34 @@ struct QueueView: View {
                     Section {
                         ForEach(model.snapshot.completions) { item in
                             if let session = model.snapshot.sessions.first(where: { $0.id == item.id }) {
-                                HStack(spacing: 10) {
-                                    Button { router.push(.conversation(session), in: .queue) } label: {
-                                        CompletionCard(title: item.title)
+                                Button { router.push(.conversation(session), in: .queue) } label: {
+                                    CompletionCard(completion: item, marking: model.markingReadSessions.contains(item.id))
+                                }
+                                .buttonStyle(.plain)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button { model.markConversationRead(sessionID: item.id) } label: {
+                                        Label("Прочитано", systemImage: "checkmark")
                                     }
-                                    .buttonStyle(.plain)
-                                    MarkConversationReadButton(session: session)
+                                    .tint(.green)
+                                }
+                                .contextMenu {
+                                    Button { model.markConversationRead(sessionID: item.id) } label: {
+                                        Label("Отметить прочитанным", systemImage: "checkmark")
+                                    }
+                                    Button { router.push(.conversation(session), in: .queue) } label: {
+                                        Label("Открыть диалог", systemImage: "bubble.left.and.bubble.right")
+                                    }
                                 }
                                 .mobileListRow()
                             }
                         }
                     } header: {
-                        MobileSectionHeader(title: "Готовые результаты", count: model.snapshot.completions.count)
+                        MobileSectionHeader(
+                            title: "Готовые результаты",
+                            count: model.snapshot.completions.count,
+                            actionTitle: model.snapshot.completions.count > 1 && model.state == .connected ? "Прочитать все" : nil,
+                            action: { model.markAllResultsRead() }
+                        )
                     }
                     .listSectionSeparator(.hidden)
                 }
@@ -266,23 +288,34 @@ struct QueueView: View {
 }
 
 private struct CompletionCard: View {
-    let title: String
+    let completion: PingviCompletion
+    var marking = false
 
     var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "checkmark.bubble.fill")
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: marking ? "ellipsis.bubble.fill" : "checkmark.bubble.fill")
                 .font(.title2)
                 .foregroundStyle(.green)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.headline)
-                Text("Открыть готовый результат")
-                    .font(.caption)
+                .frame(width: 34)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(completion.title).font(.headline)
+                Text(completion.summary)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .lineLimit(3)
+                HStack(spacing: 5) {
+                    Text(completion.agent.capitalized)
+                    Text("·")
+                    Text(completion.completedAt, style: .relative)
+                }
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
             }
-            Spacer()
+            Spacer(minLength: 4)
             Image(systemName: "chevron.right")
                 .font(.caption.bold())
                 .foregroundStyle(.tertiary)
+                .padding(.top, 5)
         }
         .padding(18)
         .mobileGlassCard(radius: 20)
@@ -466,7 +499,7 @@ struct ConversationView: View {
                         LazyVStack(alignment: .leading, spacing: 16) {
                             conversationHeader
                             if let question {
-                                Button { router.push(.question(question), in: tab) } label: {
+                                Button { router.present(question) } label: {
                                     HStack {
                                         Image(systemName: "hand.raised.fill").foregroundStyle(.orange)
                                         Text("Агент ждёт ответа").font(.headline)
@@ -742,10 +775,47 @@ struct NewMobileChatView: View {
     }
 }
 
-private struct QuestionCard: View {
+/// Queue row: the question summary opens the answer sheet, plain choices can be answered in place.
+private struct QuestionRow: View {
+    @EnvironmentObject private var model: MobileAppModel
+    @EnvironmentObject private var router: MobileRouter
+    @EnvironmentObject private var undo: MobileUndoQueue
     let question: PingviQuestion
 
+    private var sent: Bool {
+        model.replyingSessions.contains(question.id) || question.state == .checking
+    }
+
     var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Button { router.present(question) } label: { summary }
+                .buttonStyle(.plain)
+            if let pending = undo.pending[question.id] {
+                UndoReplyBar(pending: pending) { undo.cancel(sessionID: question.id) }
+            } else if sent {
+                Label {
+                    Text("Отправлено · проверяем")
+                } icon: {
+                    ProgressView().controlSize(.small)
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            } else if question.state == .unconfirmed {
+                Label("Результат отправки неизвестен", systemImage: "questionmark.circle")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else if MobileReplyBuilder.supportsQuickReply(question) {
+                quickReplies
+            }
+            if let failure = model.replyFailures[question.id] {
+                ReplyFailureRow(sessionID: question.id, failure: failure)
+            }
+        }
+        .padding(18)
+        .mobileGlassCard(radius: 20)
+    }
+
+    private var summary: some View {
         HStack(alignment: .top, spacing: 14) {
             Image(systemName: "bubble.left.and.exclamationmark.bubble.right.fill")
                 .font(.title2)
@@ -767,15 +837,60 @@ private struct QuestionCard: View {
                 .foregroundStyle(.tertiary)
                 .padding(.top, 5)
         }
-        .padding(18)
-        .mobileGlassCard(radius: 20)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
+        .accessibilityHint("Открыть вопрос")
+    }
+
+    private var quickReplies: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) { quickReplyButtons(fill: false) }
+            VStack(alignment: .leading, spacing: 8) { quickReplyButtons(fill: true) }
+        }
+    }
+
+    private func quickReplyButtons(fill: Bool) -> some View {
+        ForEach(question.options) { option in
+            Button { model.quickReply(question, option: option) } label: {
+                Text(option.label)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(fill ? 2 : 1)
+                    .frame(maxWidth: fill ? .infinity : nil)
+            }
+            .buttonStyle(.bordered)
+            .tint(MobilePalette.accent)
+            .disabled(model.state != .connected)
+            .accessibilityHint("Ответ уйдёт через 3 секунды, его можно отменить")
+        }
+    }
+}
+
+private struct UndoReplyBar: View {
+    let pending: MobileUndoQueue.Pending
+    let cancel: () -> Void
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 0.25)) { context in
+            let remaining = max(1, Int(pending.deadline.timeIntervalSince(context.date).rounded(.up)))
+            HStack(spacing: 12) {
+                ProgressView().controlSize(.small)
+                Text("Отправляем «\(pending.label)» через \(remaining)…")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                Spacer(minLength: 8)
+                Button("Отменить", action: cancel)
+                    .font(.subheadline.weight(.semibold))
+                    .buttonStyle(.bordered)
+            }
+        }
+        .accessibilityElement(children: .contain)
     }
 }
 
 struct QuestionView: View {
     @EnvironmentObject private var model: MobileAppModel
+    @Environment(\.dismiss) private var dismiss
     let question: PingviQuestion
     @State private var answer = ""
     @State private var fieldAnswers: [String: String] = [:]
@@ -849,8 +964,11 @@ struct QuestionView: View {
         .mobileConnectionBanner()
         .navigationTitle(question.title)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.visible, for: .navigationBar)
-        .toolbar(.hidden, for: .tabBar)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Закрыть") { dismiss() }
+            }
+        }
     }
 
     private func multiSelectSection(_ field: PingviQuestionField) -> some View {
@@ -892,12 +1010,14 @@ struct QuestionView: View {
     }
 
     private func submit(answer value: String) {
-        _ = model.send(PingviReply(
+        let started = model.sendReply(PingviReply(
             sessionID: question.id,
             questionToken: question.token,
             answer: value.trimmingCharacters(in: .whitespacesAndNewlines),
             fieldAnswers: collectedFieldAnswers
         ))
+        // The queue card takes over progress and failure reporting.
+        if started { dismiss() }
     }
 }
 

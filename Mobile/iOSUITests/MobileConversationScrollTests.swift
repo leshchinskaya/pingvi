@@ -50,4 +50,29 @@ final class MobileConversationScrollTests: XCTestCase {
         card.tap()
         XCTAssertTrue(app.staticTexts["Быстрый ответ"].waitForExistence(timeout: 3) || app.buttons["Да"].waitForExistence(timeout: 1))
     }
+
+    func testQuickReplyCanBeUndoneFromQueueCard() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--documentation-preview", "--documentation-screen", "queue"]
+        app.launch()
+
+        let yes = app.buttons["Да"]
+        XCTAssertTrue(yes.waitForExistence(timeout: 3))
+        yes.tap()
+
+        let undo = app.buttons["Отменить"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 2), "После тапа по варианту показывается окно отмены")
+        undo.tap()
+        XCTAssertTrue(app.buttons["Да"].waitForExistence(timeout: 2), "После отмены варианты возвращаются")
+    }
+
+    func testQuestionOpensAsSheetWithCloseButton() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--documentation-preview", "--documentation-screen", "queue", "--ui-test-question-sheet"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Быстрый ответ"].waitForExistence(timeout: 3))
+        app.buttons["Закрыть"].tap()
+        XCTAssertTrue(app.staticTexts["Ждут ответа"].waitForExistence(timeout: 3))
+    }
 }

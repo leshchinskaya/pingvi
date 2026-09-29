@@ -76,4 +76,23 @@ final class MobileReplyTests: XCTestCase {
         XCTAssertEqual(MobileSyncText.updated(now.addingTimeInterval(-20), now: now), "обновлено только что")
         XCTAssertNotNil(MobileSyncText.updated(now.addingTimeInterval(-600), now: now))
     }
+
+    func testQuickReplyOnlyForPlainChoicesUpToThree() {
+        func question(options: Int, fields: [PingviQuestionField] = [], canReply: Bool = true, state: PingviQuestionState = .waiting) -> PingviQuestion {
+            PingviQuestion(
+                id: "q", token: "t", title: "Q", project: "P", agent: "codex", source: "herdr",
+                question: "?", context: "",
+                options: (0..<options).map { PingviOption(id: "\($0)", label: "Вариант \($0)") },
+                fields: fields, state: state, canReply: canReply, arrivedAt: Date()
+            )
+        }
+        let field = PingviQuestionField(id: "f", label: "F", options: [], allowsMultiple: false)
+
+        XCTAssertTrue(MobileReplyBuilder.supportsQuickReply(question(options: 3)))
+        XCTAssertFalse(MobileReplyBuilder.supportsQuickReply(question(options: 0)))
+        XCTAssertFalse(MobileReplyBuilder.supportsQuickReply(question(options: 4)))
+        XCTAssertFalse(MobileReplyBuilder.supportsQuickReply(question(options: 2, fields: [field])))
+        XCTAssertFalse(MobileReplyBuilder.supportsQuickReply(question(options: 2, canReply: false)))
+        XCTAssertFalse(MobileReplyBuilder.supportsQuickReply(question(options: 2, state: .checking)))
+    }
 }

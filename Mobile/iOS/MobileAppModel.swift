@@ -22,6 +22,12 @@ enum MobileReplyBuilder {
     }
 
     /// Multi-select answers use the same ", " separator the Mac card writes and parses.
+    /// One-tap answers are offered for plain choices only, matching the notification actions.
+    static func supportsQuickReply(_ question: PingviQuestion) -> Bool {
+        question.canReply && question.state == .waiting && question.fields.isEmpty
+            && !question.options.isEmpty && question.options.count <= 3
+    }
+
     static func joined(_ selection: [String], in field: PingviQuestionField) -> String {
         field.options.map(\.label).filter(selection.contains).joined(separator: ", ")
     }
@@ -82,6 +88,7 @@ final class MobileAppModel: ObservableObject {
     @Published private(set) var conversationErrors: [String: String] = [:]
 
     let watch = PhoneWatchBridge()
+    let undo = MobileUndoQueue()
     private let keychain = PingviKeychain(service: "app.pingvi.mobile.link")
     private let client: PingviLinkClient
     private let cacheURL: URL
@@ -139,6 +146,7 @@ final class MobileAppModel: ObservableObject {
     var isPaired: Bool { pairing != nil }
     var questions: [PingviQuestion] { snapshot.questions.sorted { $0.arrivedAt < $1.arrivedAt } }
     var sessions: [PingviSessionSummary] { snapshot.sessions.sorted { $0.updatedAt > $1.updatedAt } }
+    var unreadResultCount: Int { snapshot.sessions.filter(\.sessionStatus.isUnreadResult).count }
 
     func activate() {
 #if DEBUG
@@ -180,16 +188,40 @@ final class MobileAppModel: ObservableObject {
         } catch { errorMessage = error.localizedDescription }
     }
 
+    /// Status text for callers that only display a message (Watch, notification actions).
     @discardableResult
     func send(_ reply: PingviReply) -> String {
         guard state == .connected else {
-            showToast(String(localized: "Ответ можно отправить только при связи с Mac."), style: .failure)
+            sendReply(reply)
             return String(localized: "Mac недоступен")
+        }
+        return sendReply(reply) ? String(localized: "Отправляем…") : String(localized: "Вопрос устарел")
+    }
+
+    /// Answers with a grace period during which the tap can be undone.
+    func quickReply(_ question: PingviQuestion, option: PingviOption) {
+        guard MobileReplyBuilder.supportsQuickReply(question), state == .connected else {
+            if state != .connected { showToast(String(localized: "Ответ можно отправить только при связи с Mac."), style: .failure) }
+            return
+        }
+        MobileHaptics.selection()
+        let reply = PingviReply(sessionID: question.id, questionToken: question.token, answer: option.replyValue)
+        undo.schedule(reply, label: option.label) { [weak self] reply in
+            self?.sendReply(reply)
+        }
+    }
+
+    /// Returns true when the reply left for the Mac.
+    @discardableResult
+    func sendReply(_ reply: PingviReply) -> Bool {
+        guard state == .connected else {
+            showToast(String(localized: "Ответ можно отправить только при связи с Mac."), style: .failure)
+            return false
         }
         guard let question = snapshot.questions.first(where: { $0.id == reply.sessionID && $0.token == reply.questionToken && $0.canReply }) else {
             replyFailures[reply.sessionID] = nil
             showToast(String(localized: "Вопрос уже закрыт или изменился."), style: .failure)
-            return String(localized: "Вопрос устарел")
+            return false
         }
         let commandID = client.sendReply(MobileReplyBuilder.normalized(reply, for: question))
         replySessionsByCommand[commandID] = reply.sessionID
@@ -197,15 +229,38 @@ final class MobileAppModel: ObservableObject {
         replyFailures[reply.sessionID] = nil
         replyingSessions.insert(reply.sessionID)
         commandResults[commandID] = PingviReplyResult(commandID: commandID, status: .checking, message: String(localized: "Отправляем…"))
-        return String(localized: "Отправляем…")
+        return true
     }
 
     func retryReply(sessionID: String) {
         guard let failure = replyFailures[sessionID] else { return }
-        send(failure.reply)
+        sendReply(failure.reply)
+    }
+
+    func markAllResultsRead() {
+        for completion in snapshot.completions { markConversationRead(sessionID: completion.id) }
+    }
+
+    /// Routes a tapped notification to the question sheet or the finished conversation.
+    func openFromNotification(kind: String, sessionID: String) {
+        let router = MobileRouter.shared
+        if kind == "done" {
+            guard let session = snapshot.sessions.first(where: { $0.id == sessionID }) else {
+                router.tab = .dialogs
+                return showToast(String(localized: "Диалог больше не доступен."))
+            }
+            router.open(.conversation(session), in: .dialogs)
+        } else if let question = snapshot.questions.first(where: { $0.id == sessionID }) {
+            router.openQuestion(question)
+        } else {
+            router.tab = .queue
+            router.queuePath = []
+            showToast(String(localized: "Вопрос уже закрыт."))
+        }
     }
 
     func forgetMac() {
+        undo.cancelAll()
         client.forgetMac()
         pairing = nil
         snapshot = PingviSnapshot(revision: 0, questions: [])
@@ -224,6 +279,7 @@ final class MobileAppModel: ObservableObject {
         lastSyncAt = nil
         UserDefaults.standard.removeObject(forKey: Self.lastSyncKey)
         MobileRouter.shared.reset()
+        MobileNotifications.shared.updateBadge(count: 0)
         try? keychain.remove("paired-mac")
         try? FileManager.default.removeItem(at: cacheURL)
         watch.update(snapshot: snapshot, connection: .stopped)
@@ -351,6 +407,7 @@ final class MobileAppModel: ObservableObject {
             replyFailures = replyFailures.filter { openTokens.contains($0.value.reply.questionToken) }
             logger.debug("Received revision \(incoming.revision, privacy: .public), pending \(incoming.questions.count, privacy: .public)")
             persist(incoming)
+            MobileNotifications.shared.updateBadge(count: incoming.questions.count)
             for question in incoming.questions where !oldTokens.contains(question.token) {
                 MobileNotifications.shared.show(question: question)
             }
