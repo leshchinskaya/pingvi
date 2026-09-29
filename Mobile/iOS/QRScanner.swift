@@ -2,12 +2,44 @@ import AVFoundation
 import SwiftUI
 import UIKit
 
+/// Camera scanner with an explanation instead of a black screen when access is denied.
+struct QRScannerScreen: View {
+    let onCode: (String) -> Void
+    @State private var denied = QRScannerScreen.cameraDenied
+
+    static var cameraDenied: Bool {
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
+        return status == .denied || status == .restricted
+    }
+
+    var body: some View {
+        if denied {
+            ContentUnavailableView {
+                Label("Нет доступа к камере", systemImage: "camera.fill")
+            } description: {
+                Text("Разрешите Pingvi доступ к камере в настройках iOS или введите код вручную.")
+            } actions: {
+                Button("Открыть настройки") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .background(Color(uiColor: .systemBackground))
+        } else {
+            QRScanner(onCode: onCode, onDenied: { denied = true })
+                .ignoresSafeArea()
+        }
+    }
+}
+
 struct QRScanner: UIViewControllerRepresentable {
     let onCode: (String) -> Void
+    var onDenied: () -> Void = {}
 
     func makeUIViewController(context: Context) -> ScannerViewController {
         let controller = ScannerViewController()
         controller.onCode = onCode
+        controller.onDenied = onDenied
         return controller
     }
 
@@ -16,6 +48,7 @@ struct QRScanner: UIViewControllerRepresentable {
 
 final class ScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
     var onCode: ((String) -> Void)?
+    var onDenied: (() -> Void)?
     private let session = AVCaptureSession()
     private var preview: AVCaptureVideoPreviewLayer?
     private var delivered = false
@@ -36,9 +69,9 @@ final class ScannerViewController: UIViewController, AVCaptureMetadataOutputObje
         case .authorized: configure()
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
-                if granted { DispatchQueue.main.async { self?.configure() } }
+                DispatchQueue.main.async { granted ? self?.configure() : self?.onDenied?() }
             }
-        default: break
+        default: onDenied?()
         }
     }
 

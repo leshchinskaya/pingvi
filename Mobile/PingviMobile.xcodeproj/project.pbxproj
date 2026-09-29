@@ -17,6 +17,7 @@
 		70D17D799A49B3A7A4D03963 /* MobileReplyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB42B1E76C1CD051EBE7B3D7 /* MobileReplyTests.swift */; };
 		726F52FD3165F624819EA306 /* MobileMarkdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A5E05839FC2910A67384819 /* MobileMarkdown.swift */; };
 		797F1C606E2765FB29016100 /* MobileDocumentationPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC40A1FF5F3E1BE307B9AEE4 /* MobileDocumentationPreview.swift */; };
+		7B917D319CB7830A7CD05AF0 /* MobileDialogsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 509C4383B784DD0A99B44059 /* MobileDialogsTests.swift */; };
 		7E34B0BD7E87B470341B839A /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = D35121EF6D7DCC5DCC09DCF0 /* Localizable.xcstrings */; };
 		8FA18ECB72EB976DC7AD779C /* WatchViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D2C6DD92339336FCD383092 /* WatchViews.swift */; };
 		939139CACDA37117FA5FF674 /* WatchStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F26A97CBE46D07D2315DF3B0 /* WatchStore.swift */; };
@@ -85,6 +86,7 @@
 		381364DFED8195DFD0A92353 /* MobileUndoQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileUndoQueue.swift; sourceTree = "<group>"; };
 		423F40E4A91044700B23AFD1 /* PingviMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PingviMobileApp.swift; sourceTree = "<group>"; };
 		5018FDA7CB90D437D8E2032F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		509C4383B784DD0A99B44059 /* MobileDialogsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileDialogsTests.swift; sourceTree = "<group>"; };
 		6A5B847016498FA991C2F7D0 /* MobileAppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileAppModel.swift; sourceTree = "<group>"; };
 		6A5E05839FC2910A67384819 /* MobileMarkdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileMarkdown.swift; sourceTree = "<group>"; };
 		79C9E2A4B9D541FA179A672C /* agent-attention */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "agent-attention"; path = ..; sourceTree = SOURCE_ROOT; };
@@ -206,6 +208,7 @@
 			isa = PBXGroup;
 			children = (
 				A29B9742A6016EDBDAD94FE3 /* MobileAppearanceTests.swift */,
+				509C4383B784DD0A99B44059 /* MobileDialogsTests.swift */,
 				FB42B1E76C1CD051EBE7B3D7 /* MobileReplyTests.swift */,
 				16F071C8A52A7B834D291E76 /* MobileRouterTests.swift */,
 				C838486D650DB79DA4CF61ED /* MobileUndoQueueTests.swift */,
@@ -403,6 +406,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B2B141E9BC43C537966D1FBD /* MobileAppearanceTests.swift in Sources */,
+				7B917D319CB7830A7CD05AF0 /* MobileDialogsTests.swift in Sources */,
 				70D17D799A49B3A7A4D03963 /* MobileReplyTests.swift in Sources */,
 				2793549611CB419FB06A6EDD /* MobileRouterTests.swift in Sources */,
 				35D5D14BC62998A9505EE39E /* MobileUndoQueueTests.swift in Sources */,

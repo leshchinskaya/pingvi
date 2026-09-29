@@ -2,6 +2,7 @@ import Foundation
 import OSLog
 import PingviLink
 import UIKit
+import UserNotifications
 
 private struct StoredMobileIdentity: Codable {
     let deviceID: String
@@ -78,6 +79,10 @@ final class MobileAppModel: ObservableObject {
     @Published private(set) var markingReadSessions: Set<String> = []
     @Published private(set) var creatingChat = false
     @Published var createdSessionID: String?
+    /// The chat created from the phone, opened right after the sheet closes.
+    @Published var createdSession: PingviSessionSummary?
+    @Published private(set) var pairingInProgress = false
+    @Published private(set) var notificationsAuthorized: Bool?
     @Published var createChatError: String?
     /// Blocking problems that need a decision (pairing). Everything else goes to toasts or inline errors.
     @Published var errorMessage: String?
@@ -183,13 +188,32 @@ final class MobileAppModel: ObservableObject {
         watch.update(snapshot: snapshot, connection: state)
     }
 
+    /// Accepts the QR payload or a manually pasted code with or without the `pingvi://` scheme.
+    static func normalizedPairingCode(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.lowercased().hasPrefix("pingvi://") else { return trimmed }
+        return "pingvi://" + trimmed.drop(while: { $0 == "/" })
+    }
+
     func pair(qrValue: String) {
         do {
-            guard let url = URL(string: qrValue) else { throw PingviLinkError.invalidPairingOffer }
+            guard let url = URL(string: Self.normalizedPairingCode(qrValue)) else { throw PingviLinkError.invalidPairingOffer }
             let offer = try PingviPairingOffer.decode(url: url)
             errorMessage = nil
+            pairingInProgress = true
             client.pair(using: offer)
         } catch { errorMessage = error.localizedDescription }
+    }
+
+    func refreshNotificationAuthorization() {
+        Task { @MainActor in
+            let settings = await UNUserNotificationCenter.current().notificationSettings()
+            switch settings.authorizationStatus {
+            case .authorized, .provisional, .ephemeral: notificationsAuthorized = true
+            case .denied: notificationsAuthorized = false
+            default: notificationsAuthorized = nil
+            }
+        }
     }
 
     /// Status text for callers that only display a message (Watch, notification actions).
@@ -370,6 +394,7 @@ final class MobileAppModel: ObservableObject {
         createChatError = nil
         creatingChat = true
         createdSessionID = nil
+        createdSession = nil
         _ = client.createChat(PingviCreateChatRequest(agent: agent, projectPath: projectPath, text: text))
     }
 
@@ -389,14 +414,20 @@ final class MobileAppModel: ObservableObject {
         client.onStateChange = { [weak self] state in
             Task { @MainActor in
                 self?.logger.info("State: \(state.description, privacy: .public)")
-                self?.state = state
-                if let self { self.watch.update(snapshot: self.snapshot, connection: state) }
+                guard let self else { return }
+                self.state = state
+                if self.pairingInProgress, self.pairing == nil, case .disconnected(let reason) = state {
+                    self.pairingInProgress = false
+                    self.errorMessage = String(localized: "Не удалось подключиться к Mac: \(reason)")
+                }
+                self.watch.update(snapshot: self.snapshot, connection: state)
             }
         }
         client.onPairingChange = { [weak self] pairing in
             Task { @MainActor in
                 guard let self else { return }
                 self.pairing = pairing
+                self.pairingInProgress = false
                 if let pairing {
                     do { try self.keychain.setCodable(pairing, for: "paired-mac") }
                     catch { self.errorMessage = error.localizedDescription }
@@ -483,6 +514,7 @@ final class MobileAppModel: ObservableObject {
             creatingChat = false
             if let session = result.session {
                 createdSessionID = session.id
+                createdSession = session
                 client.requestSnapshot()
             } else {
                 createChatError = result.error ?? String(localized: "Не удалось создать диалог.")

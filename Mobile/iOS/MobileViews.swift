@@ -174,9 +174,17 @@ struct PairingView: View {
                                         .textInputAutocapitalization(.never)
                                         .autocorrectionDisabled()
                                         .textFieldStyle(.roundedBorder)
-                                    Button("Подключить") { model.pair(qrValue: code) }
-                                        .disabled(!code.hasPrefix("pingvi://"))
-                                        .frame(maxWidth: .infinity, alignment: .trailing)
+                                    HStack {
+                                        PasteButton(payloadType: String.self) { values in
+                                            if let value = values.first { code = value }
+                                        }
+                                        .buttonBorderShape(.capsule)
+                                        .labelStyle(.titleAndIcon)
+                                        Spacer()
+                                        Button("Подключить") { model.pair(qrValue: code) }
+                                            .buttonStyle(.bordered)
+                                            .disabled(code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.pairingInProgress)
+                                    }
                                 }
                                 .padding(.top, 10)
                             }
@@ -191,13 +199,27 @@ struct PairingView: View {
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
+            .overlay {
+                if model.pairingInProgress {
+                    ZStack {
+                        Color.black.opacity(0.15).ignoresSafeArea()
+                        VStack(spacing: 14) {
+                            ProgressView().controlSize(.large)
+                            Text("Подключаемся к Mac…").font(.headline)
+                            Text("Держите устройства в одной сети.").font(.subheadline).foregroundStyle(.secondary)
+                        }
+                        .padding(28)
+                        .mobileGlassCard(radius: 24)
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+            }
             .sheet(isPresented: $scanning) {
                 NavigationStack {
-                    QRScanner { value in
+                    QRScannerScreen { value in
                         scanning = false
                         model.pair(qrValue: value)
                     }
-                    .ignoresSafeArea()
                     .navigationTitle("QR-код на Mac")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar { Button("Отмена") { scanning = false } }
@@ -350,45 +372,112 @@ private struct ReplyFailureRow: View {
     }
 }
 
+enum DialogsFilter: String, CaseIterable, Identifiable {
+    case all
+    case active
+    case unread
+
+    var id: String { rawValue }
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .all: return "Все"
+        case .active: return "Активные"
+        case .unread: return "Непрочитанные"
+        }
+    }
+
+    func includes(_ session: PingviSessionSummary) -> Bool {
+        let status = session.sessionStatus
+        switch self {
+        case .all: return true
+        case .active: return status.awaitsAnswer || status == .working
+        case .unread: return status.isUnreadResult
+        }
+    }
+}
+
+enum DialogsGrouping {
+    struct Group: Identifiable, Equatable {
+        let id: String
+        let title: String
+        let sessions: [PingviSessionSummary]
+    }
+
+    /// Sections for the "Все" filter: what needs an answer, what is running, then everything else.
+    static func groups(_ sessions: [PingviSessionSummary]) -> [Group] {
+        let waiting = sessions.filter { $0.sessionStatus.awaitsAnswer }
+        let working = sessions.filter { $0.sessionStatus == .working }
+        let rest = sessions.filter { !$0.sessionStatus.awaitsAnswer && $0.sessionStatus != .working }
+        return [
+            Group(id: "waiting", title: String(localized: "Ждут ответа"), sessions: waiting),
+            Group(id: "working", title: String(localized: "Работают"), sessions: working),
+            Group(id: "recent", title: String(localized: "Недавние"), sessions: rest)
+        ].filter { !$0.sessions.isEmpty }
+    }
+}
+
 struct DialogsView: View {
     @EnvironmentObject private var model: MobileAppModel
     @EnvironmentObject private var router: MobileRouter
+    @AppStorage("dialogsFilter") private var filterRaw = DialogsFilter.all.rawValue
+    @AppStorage("dialogsProject") private var project = ""
     @State private var search = ""
     @State private var showNewChat = false
 
+    private var filter: DialogsFilter { DialogsFilter(rawValue: filterRaw) ?? .all }
+
+    private var projects: [String] {
+        Array(Set(model.sessions.map(\.project).filter { !$0.isEmpty })).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
     private var filtered: [PingviSessionSummary] {
-        guard !search.isEmpty else { return model.sessions }
-        return model.sessions.filter {
-            ($0.title + " " + $0.project + " " + $0.agent + " " + $0.preview)
-                .localizedCaseInsensitiveContains(search)
+        model.sessions.filter { session in
+            filter.includes(session)
+                && (project.isEmpty || session.project == project)
+                && (search.isEmpty || (session.title + " " + session.project + " " + session.agent + " " + session.preview)
+                    .localizedCaseInsensitiveContains(search))
         }
+    }
+
+    private var newChatUnavailableReason: String? {
+        if model.state != .connected { return String(localized: "Новый диалог можно начать, когда есть связь с Mac.") }
+        if model.snapshot.projects.isEmpty { return String(localized: "На Mac пока нет проектов. Запустите Claude Code или Codex в папке проекта.") }
+        return nil
     }
 
     var body: some View {
         NavigationStack(path: $router.dialogsPath) {
             List {
+                Section {
+                    filterChips
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 4, trailing: 0))
+                }
                 if filtered.isEmpty {
                     ContentUnavailableView(
-                        search.isEmpty ? "Диалогов нет" : "Ничего не найдено",
+                        emptyTitle,
                         systemImage: search.isEmpty ? "bubble.left.and.bubble.right" : "magnifyingglass",
-                        description: Text(search.isEmpty ? "Сессии с Mac появятся здесь." : "Попробуйте изменить запрос.")
+                        description: Text(emptyDescription)
                     )
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 28)
                     .mobileListRow()
-                } else {
-                    ForEach(filtered) { session in
-                        HStack(spacing: 10) {
-                            Button { router.push(.conversation(session), in: .dialogs) } label: {
-                                SessionCard(session: session)
-                            }
-                            .buttonStyle(.plain)
-                            if session.sessionStatus.isUnreadResult {
-                                MarkConversationReadButton(session: session)
-                            }
+                } else if filter == .all && search.isEmpty {
+                    ForEach(DialogsGrouping.groups(filtered)) { group in
+                        Section {
+                            ForEach(group.sessions) { sessionRow($0) }
+                        } header: {
+                            MobileSectionHeader(title: LocalizedStringKey(group.title), count: group.sessions.count)
                         }
-                        .mobileListRow()
+                        .listSectionSeparator(.hidden)
                     }
+                } else {
+                    Section {
+                        ForEach(filtered) { sessionRow($0) }
+                    }
+                    .listSectionSeparator(.hidden)
                 }
             }
             .mobileListStyle()
@@ -403,42 +492,141 @@ struct DialogsView: View {
                     Color.clear.frame(width: 1, height: 1).accessibilityHidden(true)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { showNewChat = true } label: { Image(systemName: "square.and.pencil") }
-                        .disabled(model.state != .connected || model.snapshot.projects.isEmpty)
-                        .accessibilityLabel("Новый диалог")
+                    Button {
+                        if let reason = newChatUnavailableReason { model.showToast(reason) }
+                        else { showNewChat = true }
+                    } label: {
+                        Image(systemName: "square.and.pencil")
+                            .foregroundStyle(newChatUnavailableReason == nil ? MobilePalette.accent : .secondary)
+                    }
+                    .accessibilityLabel("Новый диалог")
+                    .accessibilityHint(newChatUnavailableReason ?? "")
                 }
             }
             .sheet(isPresented: $showNewChat) { NewMobileChatView() }
+            .onChange(of: model.createdSession) { _, session in
+                guard let session else { return }
+                model.createdSession = nil
+                router.push(.conversation(session), in: .dialogs)
+            }
+            .onChange(of: projects) { _, available in
+                if !project.isEmpty && !available.contains(project) { project = "" }
+            }
             .navigationDestination(for: MobileDestination.self) { MobileDestinationView(destination: $0) }
         }
         .environment(\.mobileTab, .dialogs)
     }
+
+    private var emptyTitle: LocalizedStringKey {
+        if !search.isEmpty { return "Ничего не найдено" }
+        if filter == .unread { return "Всё прочитано" }
+        if filter == .active { return "Сейчас никто не работает" }
+        return project.isEmpty ? "Диалогов нет" : "В проекте нет диалогов"
+    }
+
+    private var emptyDescription: LocalizedStringKey {
+        if !search.isEmpty || filter != .all || !project.isEmpty { return "Попробуйте изменить фильтр или запрос." }
+        return "Сессии с Mac появятся здесь."
+    }
+
+    private var filterChips: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ForEach(DialogsFilter.allCases) { item in
+                    chip(item.title, selected: filter == item) {
+                        MobileHaptics.selection()
+                        filterRaw = item.rawValue
+                    }
+                }
+                if projects.count > 1 || !project.isEmpty {
+                    Menu {
+                        Button { project = "" } label: {
+                            if project.isEmpty { Label("Все проекты", systemImage: "checkmark") } else { Text("Все проекты") }
+                        }
+                        ForEach(projects, id: \.self) { name in
+                            Button { project = name } label: {
+                                if project == name { Label(name, systemImage: "checkmark") } else { Text(name) }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(project.isEmpty ? String(localized: "Проект") : project).lineLimit(1)
+                            Image(systemName: "chevron.down").font(.caption2.bold())
+                        }
+                        .chipStyle(selected: !project.isEmpty)
+                    }
+                    .accessibilityLabel(project.isEmpty ? "Фильтр по проекту" : "Проект: \(project)")
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 2)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private func chip(_ title: LocalizedStringKey, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title).chipStyle(selected: selected)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func sessionRow(_ session: PingviSessionSummary) -> some View {
+        let question = model.snapshot.questions.first { $0.id == session.id }
+        return Button { router.push(.conversation(session), in: .dialogs) } label: {
+            SessionCard(session: session, marking: model.markingReadSessions.contains(session.id))
+        }
+        .buttonStyle(.plain)
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            if session.sessionStatus.isUnreadResult {
+                Button { model.markConversationRead(sessionID: session.id) } label: {
+                    Label("Прочитано", systemImage: "checkmark")
+                }
+                .tint(.green)
+            }
+        }
+        .contextMenu {
+            if session.sessionStatus.isUnreadResult {
+                Button { model.markConversationRead(sessionID: session.id) } label: {
+                    Label("Отметить прочитанным", systemImage: "checkmark")
+                }
+            }
+            if let question {
+                Button { router.present(question) } label: {
+                    Label("Открыть вопрос", systemImage: "hand.raised")
+                }
+            }
+            Button {
+                UIPasteboard.general.string = session.title
+                model.showToast(String(localized: "Название скопировано"), style: .success)
+            } label: {
+                Label("Скопировать название", systemImage: "doc.on.doc")
+            }
+        }
+        .mobileListRow()
+    }
 }
 
-private struct MarkConversationReadButton: View {
-    @EnvironmentObject private var model: MobileAppModel
-    let session: PingviSessionSummary
-
-    var body: some View {
-        Button { model.markConversationRead(sessionID: session.id) } label: {
-            Image(systemName: model.markingReadSessions.contains(session.id) ? "ellipsis" : "checkmark")
-                .font(.headline.bold())
-                .frame(width: 44, height: 44)
-                .background(.thinMaterial, in: Circle())
-        }
-        .buttonStyle(.borderless)
-        .disabled(model.state != .connected || model.markingReadSessions.contains(session.id))
-        .accessibilityLabel("Отметить «\(session.title)» прочитанным")
+private extension View {
+    func chipStyle(selected: Bool) -> some View {
+        font(.subheadline.weight(.semibold))
+            .foregroundStyle(selected ? Color.white : Color.primary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(selected ? AnyShapeStyle(MobilePalette.accent) : AnyShapeStyle(.thinMaterial), in: Capsule())
+            .contentShape(Capsule())
     }
 }
 
 private struct SessionCard: View {
     let session: PingviSessionSummary
+    var marking = false
 
     var body: some View {
         let status = session.sessionStatus
         HStack(alignment: .top, spacing: 14) {
-            Image(systemName: status.symbol)
+            Image(systemName: marking ? "ellipsis.bubble.fill" : status.symbol)
                 .font(.title2)
                 .foregroundStyle(status.color)
                 .frame(width: 34)
@@ -842,9 +1030,11 @@ private struct FailedChatBubble: View {
 struct NewMobileChatView: View {
     @EnvironmentObject private var model: MobileAppModel
     @Environment(\.dismiss) private var dismiss
-    @State private var agent = "codex"
+    @AppStorage("newChatAgent") private var agent = "codex"
+    @AppStorage("newChatProject") private var lastProject = ""
     @State private var projectPath = ""
     @State private var text = ""
+    @FocusState private var textFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -867,6 +1057,7 @@ struct NewMobileChatView: View {
                 Section {
                     TextField("Что нужно сделать?", text: $text, axis: .vertical)
                         .lineLimit(5...12)
+                        .focused($textFocused)
                 } header: {
                     Text("Первая задача или сообщение")
                 } footer: {
@@ -881,6 +1072,7 @@ struct NewMobileChatView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Отмена") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(model.creatingChat ? "Создаём…" : "Начать") {
+                        lastProject = projectPath
                         model.createChat(agent: agent, projectPath: projectPath, text: text)
                     }
                     .disabled(model.creatingChat || projectPath.isEmpty || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -888,7 +1080,11 @@ struct NewMobileChatView: View {
             }
             .onAppear {
                 model.createChatError = nil
-                if projectPath.isEmpty { projectPath = model.snapshot.projects.first?.path ?? "" }
+                let paths = model.snapshot.projects.map(\.path)
+                if projectPath.isEmpty {
+                    projectPath = paths.contains(lastProject) ? lastProject : (paths.first ?? "")
+                }
+                textFocused = true
             }
             .onChange(of: model.createdSessionID) { _, id in if id != nil { dismiss() } }
         }
@@ -1144,28 +1340,144 @@ struct QuestionView: View {
 struct MobileSettingsView: View {
     @EnvironmentObject private var model: MobileAppModel
     @EnvironmentObject private var appearance: MobileAppearance
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("appTheme") private var theme = MobileTheme.system.rawValue
     @AppStorage("fullNotificationPreviews") private var fullPreviews = false
+    @State private var showAppearance = false
+
+    private var themeTitle: String { (MobileTheme(rawValue: theme) ?? .system).title }
+
+    private var version: String {
+        let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+        return build.isEmpty ? short : "\(short) (\(build))"
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent("Mac", value: model.pairing?.peerName ?? String(localized: "Не подключён"))
+                LabeledContent("Состояние") {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(model.state == .connected ? Color.green : Color.orange)
+                            .frame(width: 8, height: 8)
+                            .accessibilityHidden(true)
+                        Text(model.state.description)
+                    }
+                }
+                TimelineView(.everyMinute) { context in
+                    LabeledContent("Данные", value: MobileSyncText.updated(model.lastSyncAt, now: context.date) ?? String(localized: "ещё не получены"))
+                }
+                if model.state != .connected {
+                    Button("Переподключить") { model.reconnect() }
+                        .disabled(model.state == .searching || model.state == .connecting)
+                }
+                NavigationLink("Подробнее") { MobileConnectionDetailsView() }
+            } header: {
+                Text("Подключение").accessibilityAddTraits(.isHeader)
+            }
+
+            Section {
+                if model.notificationsAuthorized == false {
+                    Label("Уведомления выключены в iOS", systemImage: "bell.slash.fill")
+                        .foregroundStyle(.orange)
+                    Button("Открыть настройки уведомлений") {
+                        if let url = URL(string: UIApplication.openNotificationSettingsURLString) { UIApplication.shared.open(url) }
+                    }
+                }
+                Toggle("Показывать текст вопроса", isOn: $fullPreviews)
+            } header: {
+                Text("Уведомления")
+            } footer: {
+                Text(model.notificationsAuthorized == false
+                     ? "Без уведомлений Pingvi не сообщит о новых вопросах, пока приложение закрыто."
+                     : "По умолчанию на заблокированном экране показывается только факт нового вопроса.")
+            }
+
+            Section {
+                Button { showAppearance = true } label: {
+                    HStack {
+                        LabeledContent("Оформление", value: "\(appearance.selectedIcon.title) · \(themeTitle)")
+                        Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.tertiary)
+                    }
+                    .foregroundStyle(.primary)
+                }
+            }
+
+            Section {
+                LabeledContent("Версия", value: version)
+                Button("Скопировать диагностику") {
+                    UIPasteboard.general.string = model.diagnostics()
+                    model.showToast(String(localized: "Диагностика скопирована"), style: .success)
+                }
+            } header: {
+                Text("О приложении")
+            } footer: {
+                #if DEBUG
+                Text("Тексты вопросов, ответы и ключи в диагностику не включаются. Без Apple Developer Program приложение нужно переустанавливать через Xcode каждые 7 дней; фоновая доставка в локальной сети не гарантируется.")
+                #else
+                Text("Тексты вопросов, ответы и ключи в диагностику не включаются.")
+                #endif
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background { MobileAmbientBackground() }
+        .mobileConnectionBanner()
+        .navigationTitle("Настройки")
+        .toolbar(.hidden, for: .navigationBar)
+        .navigationDestination(isPresented: $showAppearance) { MobileAppearanceSettingsView() }
+        .onAppear {
+            model.refreshNotificationAuthorization()
+            #if DEBUG
+            if MobileDocumentationPreview.isEnabled && MobileDocumentationPreview.screen == .appearance { showAppearance = true }
+            #endif
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { model.refreshNotificationAuthorization() }
+        }
+    }
+}
+
+private struct MobileConnectionDetailsView: View {
+    @EnvironmentObject private var model: MobileAppModel
     @State private var confirmForget = false
 
     var body: some View {
         Form {
             Section {
                 LabeledContent("Mac", value: model.pairing?.peerName ?? String(localized: "Не подключён"))
-                LabeledContent("Состояние", value: model.state.description)
                 if let fingerprint = model.pairing?.fingerprint {
                     LabeledContent("Отпечаток", value: fingerprint)
+                        .textSelection(.enabled)
                 }
+            } footer: {
+                Text("Сверьте отпечаток с показанным на Mac в Настройках → Подключения.")
+            }
+            Section {
                 Button("Забыть Mac…", role: .destructive) { confirmForget = true }
-            } header: {
-                Text("Подключение").accessibilityAddTraits(.isHeader)
+            } footer: {
+                Text("Для повторного подключения потребуется новый QR-код.")
             }
-            Section("Уведомления") {
-                Toggle("Показывать текст вопроса", isOn: $fullPreviews)
-                Text("По умолчанию на заблокированном экране показывается только факт нового вопроса.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+        }
+        .scrollContentBackground(.hidden)
+        .background { MobileAmbientBackground() }
+        .navigationTitle("Подключение")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .alert("Забыть Mac?", isPresented: $confirmForget) {
+            Button("Забыть", role: .destructive) { model.forgetMac() }
+            Button("Отмена", role: .cancel) {}
+        } message: { Text("Для повторного подключения потребуется новый QR-код.") }
+    }
+}
+
+struct MobileAppearanceSettingsView: View {
+    @EnvironmentObject private var appearance: MobileAppearance
+    @AppStorage("appTheme") private var theme = MobileTheme.system.rawValue
+
+    var body: some View {
+        Form {
             Section("Тема интерфейса") {
                 Picker("Тема", selection: $theme) {
                     ForEach(MobileTheme.allCases) { item in
@@ -1223,28 +1535,11 @@ struct MobileSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            Section("Диагностика") {
-                Button("Скопировать диагностику") {
-                    UIPasteboard.general.string = model.diagnostics()
-                    model.showToast(String(localized: "Диагностика скопирована"), style: .success)
-                }
-                Text("Тексты вопросов, ответы и ключи не включаются.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Section {
-                Text("Без Apple Developer Program приложение нужно переустанавливать через Xcode каждые 7 дней. Фоновая доставка в локальной сети не гарантируется.")
-                    .font(.caption)
-            }
         }
         .scrollContentBackground(.hidden)
         .background { MobileAmbientBackground() }
-        .mobileConnectionBanner()
-        .navigationTitle("Настройки")
-        .toolbar(.hidden, for: .navigationBar)
-        .alert("Забыть Mac?", isPresented: $confirmForget) {
-            Button("Забыть", role: .destructive) { model.forgetMac() }
-            Button("Отмена", role: .cancel) {}
-        } message: { Text("Для повторного подключения потребуется новый QR-код.") }
+        .navigationTitle("Оформление")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
     }
 }

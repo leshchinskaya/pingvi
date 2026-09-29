@@ -9,7 +9,10 @@ final class MobileConversationScrollTests: XCTestCase {
         ]
         app.launch()
 
-        XCTAssertTrue(app.buttons["Отметить «Уведомления на устройствах» прочитанным"].waitForExistence(timeout: 3))
+        let title = app.staticTexts["Уведомления на устройствах"]
+        XCTAssertTrue(title.waitForExistence(timeout: 3))
+        title.swipeLeft()
+        XCTAssertTrue(app.buttons["Прочитано"].waitForExistence(timeout: 2), "Непрочитанный диалог отмечается свайпом")
     }
 
     func testOpeningLongConversationShowsLatestMessageWithoutUserScroll() {
@@ -87,5 +90,29 @@ final class MobileConversationScrollTests: XCTestCase {
             app.staticTexts["Сообщение будет передано в исходную сессию на Mac."].exists,
             "Подпись под полем ввода показывается только при проблеме"
         )
+    }
+
+    func testDialogsFilterChipsNarrowTheList() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--documentation-preview", "--documentation-screen", "dialogs"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Работают"].waitForExistence(timeout: 3), "В режиме «Все» диалоги сгруппированы по статусу")
+        app.buttons["Непрочитанные"].tap()
+        XCTAssertTrue(app.staticTexts["Уведомления на устройствах"].waitForExistence(timeout: 2))
+        XCTAssertFalse(app.staticTexts["Обновление сайта"].exists)
+        app.buttons["Все"].tap()
+    }
+
+    func testSettingsStartWithConnectionAndMoveAppearanceToSubscreen() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--documentation-preview", "--documentation-screen", "dialogs"]
+        app.launch()
+
+        app.tabBars.buttons["Настройки"].tap()
+        XCTAssertTrue(app.staticTexts["Подключение"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.staticTexts["Иконка"].exists, "Выбор иконки перенесён на подэкран «Оформление»")
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Оформление'")).firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["Иконка"].waitForExistence(timeout: 3))
     }
 }
