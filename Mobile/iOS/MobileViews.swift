@@ -434,18 +434,21 @@ private struct ReplyFailureRow: View {
     }
 }
 
+/// Same status filters as the Mac dashboard (`SessionFilter` in the Mac app).
 enum DialogsFilter: String, CaseIterable, Identifiable {
     case all
-    case active
-    case unread
+    case waiting
+    case working
+    case done
 
     var id: String { rawValue }
 
     var title: LocalizedStringKey {
         switch self {
         case .all: return "Все"
-        case .active: return "Активные"
-        case .unread: return "Непрочитанные"
+        case .waiting: return "Ждут"
+        case .working: return "В работе"
+        case .done: return "Готово"
         }
     }
 
@@ -453,8 +456,9 @@ enum DialogsFilter: String, CaseIterable, Identifiable {
         let status = session.sessionStatus
         switch self {
         case .all: return true
-        case .active: return status.awaitsAnswer || status == .working
-        case .unread: return status.isUnreadResult
+        case .waiting: return status.awaitsAnswer
+        case .working: return status == .working
+        case .done: return status.isUnreadResult
         }
     }
 }
@@ -473,7 +477,7 @@ enum DialogsGrouping {
         let rest = sessions.filter { !$0.sessionStatus.awaitsAnswer && $0.sessionStatus != .working }
         return [
             Group(id: "waiting", title: String(localized: "Ждут ответа"), sessions: waiting),
-            Group(id: "working", title: String(localized: "Работают"), sessions: working),
+            Group(id: "working", title: String(localized: "В работе"), sessions: working),
             Group(id: "recent", title: String(localized: "Недавние"), sessions: rest)
         ].filter { !$0.sessions.isEmpty }
     }
@@ -581,8 +585,9 @@ struct DialogsView: View {
 
     private var emptyTitle: LocalizedStringKey {
         if !search.isEmpty { return "Ничего не найдено" }
-        if filter == .unread { return "Всё прочитано" }
-        if filter == .active { return "Сейчас никто не работает" }
+        if filter == .waiting { return "Никто не ждёт" }
+        if filter == .working { return "Сейчас никто не работает" }
+        if filter == .done { return "Новых результатов нет" }
         return project.isEmpty ? "Диалогов нет" : "В проекте нет диалогов"
     }
 

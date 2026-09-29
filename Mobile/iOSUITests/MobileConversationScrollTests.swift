@@ -98,8 +98,10 @@ final class MobileConversationScrollTests: XCTestCase {
         app.launchArguments = ["--documentation-preview", "--documentation-screen", "dialogs"]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["Работают"].waitForExistence(timeout: 3), "В режиме «Все» диалоги сгруппированы по статусу")
-        app.buttons["Непрочитанные"].tap()
+        XCTAssertTrue(app.staticTexts["В работе"].firstMatch.waitForExistence(timeout: 3), "В режиме «Все» диалоги сгруппированы по статусу")
+        XCTAssertTrue(app.buttons["Ждут"].exists)
+        XCTAssertTrue(app.buttons["В работе"].exists)
+        app.buttons["Готово"].tap()
         XCTAssertTrue(app.staticTexts["Уведомления на устройствах"].waitForExistence(timeout: 2))
         XCTAssertFalse(app.staticTexts["Обновление сайта"].exists)
         app.buttons["Все"].tap()

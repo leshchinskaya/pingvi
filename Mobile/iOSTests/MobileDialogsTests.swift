@@ -11,11 +11,12 @@ final class MobileDialogsTests: XCTestCase {
     }
 
     func testFiltersMatchStatuses() {
-        XCTAssertTrue(DialogsFilter.active.includes(session("a", "working")))
-        XCTAssertTrue(DialogsFilter.active.includes(session("b", "unconfirmed")))
-        XCTAssertFalse(DialogsFilter.active.includes(session("c", "done")))
-        XCTAssertTrue(DialogsFilter.unread.includes(session("d", "done")))
-        XCTAssertFalse(DialogsFilter.unread.includes(session("e", "viewed")))
+        XCTAssertTrue(DialogsFilter.waiting.includes(session("a", "unconfirmed")))
+        XCTAssertFalse(DialogsFilter.waiting.includes(session("b", "working")))
+        XCTAssertTrue(DialogsFilter.working.includes(session("c", "working")))
+        XCTAssertFalse(DialogsFilter.working.includes(session("d", "waiting")))
+        XCTAssertTrue(DialogsFilter.done.includes(session("e", "done")))
+        XCTAssertFalse(DialogsFilter.done.includes(session("f", "viewed")))
         XCTAssertTrue(DialogsFilter.all.includes(session("f", "future")))
     }
 
